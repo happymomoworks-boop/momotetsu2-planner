@@ -1,0 +1,15 @@
+{
+  "name": "桃鉄2 攻略プランナー（非公式）",
+  "short_name": "桃鉄2攻略",
+  "description": "桃太郎電鉄2 東日本編・西日本編の寄り道・年別プラン・物件・歴史ヒーローをスマホで見る非公式攻略ツール",
+  "lang": "ja",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fff7e9",
+  "theme_color": "#f35461",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

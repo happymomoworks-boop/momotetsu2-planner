@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>桃鉄2 攻略プランナー</title>
+<meta name="description" content="桃太郎電鉄2 東日本編・西日本編の寄り道、年別プラン、物件、歴史ヒーロー、カードをスマホで見る非公式の攻略ツール。">
+<meta name="theme-color" content="#f35461" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1a2238" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="桃鉄2攻略">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="180x180" href="icons/icon-180.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<!-- フォントは後から読み込む（電波が弱くても、先にアプリを表示する） -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@500;800&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <img class="logo" src="img/official/momo2_logo_s.png" width="400" height="180" alt="桃太郎電鉄2 あなたの町も きっとある">
+      <div class="brand-r">
+        <h1>攻略プランナー</h1>
+        <p class="tagline">次の一手がわかる <span class="unofficial">非公式ファンツール</span></p>
+      </div>
+    </div>
+  </div>
+  <div class="scene" aria-hidden="true">
+    <img class="chara w" src="img/official/top_chara_1.webp" width="213" height="251" alt="">
+    <img class="chara e" src="img/official/top_chara_2.webp" width="167" height="219" alt="">
+  </div>
+</header>
+
+<div class="bar">
+  <div class="wrap">
+    <div class="seg" role="group" aria-label="マップを選ぶ">
+      <button type="button" id="ed-east" data-ed="east" aria-pressed="true">東日本編</button>
+      <button type="button" id="ed-west" data-ed="west" aria-pressed="false">西日本編</button>
+    </div>
+    <div class="ystep" role="group" aria-label="いまの年を変える">
+      <button type="button" id="y-prev" data-step="-1" aria-label="前の年へ">◀</button>
+      <a href="#year" aria-label="年別ガイドを開く"><b id="ynow">1</b><small id="ytot">/17年</small></a>
+      <button type="button" id="y-next" data-step="1" aria-label="次の年へ">▶</button>
+    </div>
+  </div>
+</div>
+
+<main class="wrap">
+  <section id="v-plan" data-view="plan">
+    <img class="secchara" src="img/official/event_chara_1.webp" width="123" height="118" alt="" loading="lazy"><h2>攻略プラン <small id="plan-ed"></small></h2>
+    <div id="focus" class="focus" aria-live="polite"></div>
+    <div class="panel setup">
+      <div class="f">
+        <label for="in-n">何年プレイする？</label>
+        <div class="nrow">
+          <button type="button" data-n="-1" aria-label="1年減らす">−</button>
+          <input id="in-n" type="number" inputmode="numeric" min="1" max="100" value="17">
+          <span>年</span>
+          <button type="button" data-n="1" aria-label="1年増やす">＋</button>
+        </div>
+        <div class="chips" id="presets" role="group" aria-label="よく使う年数"></div>
+      </div>
+      <div class="f" data-pick="from">
+        <label for="in-from">いまいる駅</label>
+        <div class="prow"><input id="in-from" type="text" autocomplete="off" enterkeyhint="done" placeholder="駅名（漢字・ひらがな）" maxlength="20"><button type="button" data-mappick="from" aria-pressed="false">地図で指定</button></div>
+        <ul class="sugg" id="sugg-from" hidden></ul>
+      </div>
+      <div class="f" data-pick="to">
+        <label for="in-to">目的地</label>
+        <div class="prow"><input id="in-to" type="text" autocomplete="off" enterkeyhint="done" placeholder="駅名（漢字・ひらがな）" maxlength="20"><button type="button" data-mappick="to" aria-pressed="false">地図で指定</button></div>
+        <ul class="sugg" id="sugg-to" hidden></ul>
+        <div class="setup-tools"><button type="button" class="soft-btn" data-swap="1">⇄ いまいる駅と目的地を入れ替える</button></div>
+      </div>
+      <div class="f">
+        <label for="in-money">所持金（入れなくてもOK）</label>
+        <div class="nrow"><input id="in-money" type="number" inputmode="decimal" min="0" max="99999" step="0.1" placeholder="例 12.5" class="w-money"><span>億円</span></div>
+        <p class="note">入れると、いま独占できる駅・買える物件を判定し、手が届かないヒーローは順位を下げます。</p>
+      </div>
+      <details class="more" id="more">
+        <summary>くわしい状況（月・人数・カード・作戦）<span id="more-sum"></span></summary>
+        <div class="f">
+          <label for="in-month">いまの月</label>
+          <select id="in-month">
+            <option value="">わからない（未設定）</option>
+            <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
+          </select>
+          <p class="note">月で決まる注意（7月の軽井沢、8月の青マス、決算など）と、止まらない場所に反映します。</p>
+        </div>
+        <div class="f">
+          <label for="in-playmode">プレイ人数</label>
+          <select id="in-playmode">
+            <option value="solo">ひとり（COM対戦）</option>
+            <option value="multi">複数人</option>
+          </select>
+          <p class="note">最初に止まるともらえるカードの中身（人数で変わる駅）の表示を切り替えます。</p>
+        </div>
+        <div class="f">
+          <label for="in-goal">作戦</label>
+          <select id="in-goal">
+            <option value="balance">バランス</option>
+            <option value="asset">物件・ヒーロー重視</option>
+            <option value="card">カード重視</option>
+          </select>
+          <p class="note">寄り道する駅と、やることの順位の重みを変えます。</p>
+        </div>
+        <div class="f">
+          <span class="lab" id="cardreg-label">いま持っているカード</span>
+          <div class="cardreg" id="cardreg" role="group" aria-labelledby="cardreg-label"></div>
+          <div class="nrow small"><span>ほかのカード</span><button type="button" data-other="-1" aria-label="ほかのカードを1枚減らす">−</button><b id="other-n" class="num">0</b><span>枚</span><button type="button" data-other="1" aria-label="ほかのカードを1枚増やす">＋</button></div>
+          <p class="note" id="cardreg-note"></p>
+        </div>
+      </details>
+    </div>
+    <div id="planout" class="planout"></div>
+    <h3 id="ov-title"></h3>
+    <ul class="panel ov" id="ov"></ul>
+    <p class="note">駅の位置とマス数は、公式サイト「まるっと全駅！マップ」の盤面をもとにしています。寄り道は盤面の上で通り道に近い駅から選び、マス数は「たて＋よこ」で数えています。線路のつながりは入っていないので、回り道の分だけ実際のマス数は増えます。動く前にゲーム画面で経路を確かめてください。</p>
+  </section>
+
+  <section id="v-year" data-view="year" hidden>
+    <h2>年別ガイド <small>年をタップ</small></h2>
+    <div class="chips jump" id="jump" role="group" aria-label="時期の始まりへ移動"></div>
+    <div class="line" id="line" role="group" aria-label="年を選ぶ"></div>
+    <p class="note" id="line-note"></p>
+    <div class="panel sign" id="sign"></div>
+    <ul class="flags" id="flags"></ul>
+    <h3>この年にやること <small class="h3note">終わったらチェック</small></h3>
+    <ul class="panel todo check" id="todo"></ul>
+    <h3>気をつけること</h3>
+    <ul class="panel mini" id="bonbi"></ul>
+    <ul class="panel mini" id="avoid"></ul>
+    <h3>ボンビーが出る年</h3>
+    <figure class="panel tl">
+      <div class="tl-scroll"><div class="tl-grid" id="tl"></div></div>
+      <div class="legend"><span><i style="background:var(--crit)"></i>大（資産を大きく失う）</span><span><i style="background:var(--serious)"></i>中</span><span><i style="background:var(--neutral-mark)"></i>小</span></div>
+      <p class="note" id="tl-note"></p>
+    </figure>
+    <h3>月のカレンダー（4月始まり）</h3>
+    <div class="cal" id="cal"></div>
+    <ul class="panel calnotes" id="calnotes"></ul>
+    <h3>毎年の基本</h3>
+    <ul class="panel rules" id="rules"></ul>
+  </section>
+
+  <section id="v-map" data-view="map" hidden>
+    <img class="secchara" src="img/official/map_chara_1.webp" width="254" height="157" alt="" loading="lazy"><h2>止まる駅マップ <small>公式の全駅マップと同じ盤面の位置</small></h2>
+    <div class="search"><input id="map-q" type="search" placeholder="駅名・よみで探す（例：おおはら）" aria-label="駅名で探す" maxlength="20" enterkeyhint="search"></div>
+    <p class="rowlabel">エリア（タップで拡大）</p>
+    <div class="chips" id="regions" role="group" aria-label="エリアを選ぶ"></div>
+    <p class="rowlabel">駅の種類</p>
+    <div class="chips" id="filters" role="group" aria-label="駅の種類で絞る"></div>
+    <p class="sub" id="regnote"></p>
+    <div class="mapbox"><svg id="mapsvg" role="img" aria-label="駅の位置を示した地図。下の一覧に同じ内容があります。"></svg></div>
+    <div class="pinrow" id="pinlegend" aria-hidden="true"></div>
+    <div class="panel detail" id="detail"></div>
+    <div class="groups" id="groups"></div>
+    <h3>駅の数と拠点</h3>
+    <div class="tiles" id="tiles"></div>
+    <p class="sub" id="base"></p>
+    <p class="note">駅の位置は公式サイト「まるっと全駅！マップ」の盤面と同じです（1マス単位）。小さなマスは物件駅などで、タップすると駅名と物件が出ます。線路は描いていません。「発」「着」はプランで入れたいまいる駅と目的地です。</p>
+  </section>
+
+  <section id="v-heroes" data-view="heroes" hidden>
+    <img class="secchara" src="img/official/hero_chara_1.webp" width="190" height="196" alt="" loading="lazy"><h2>歴史ヒーロー <small>独占額の安い順</small></h2>
+    <div class="search"><input id="hero-q" type="search" placeholder="名前・駅・効果で探す" aria-label="ヒーローを探す" maxlength="20" enterkeyhint="search"></div>
+    <div class="chips" id="hero-filter" role="group" aria-label="ヒーローを絞る"></div>
+    <div id="herolist" class="groups"></div>
+    <h3>仲間にしない</h3>
+    <ul class="panel mini" id="heroavoid"></ul>
+    <p class="note">SS・S・A・BはGame8の評価。「推」はファミ通の攻略ガイドの推奨です。「東西」は同じ人物がもう一方のマップにもいる場合の駅と独占額です。</p>
+  </section>
+
+  <section id="v-props" data-view="props" hidden>
+    <img class="secchara" src="img/official/property_chara_1.webp" width="138" height="190" alt="" loading="lazy"><h2>高収益物件 <small>年間の収益が多い順</small></h2>
+    <div class="search"><input id="prop-q" type="search" placeholder="駅・物件名で探す" aria-label="物件を探す" maxlength="20" enterkeyhint="search"></div>
+    <div class="chips" id="prop-filter" role="group" aria-label="物件を絞る"></div>
+    <div class="panel"><div class="bars" id="bars"></div></div>
+    <p class="note" id="propnote"></p>
+    <p class="note">「元が取れるまで」は価格÷年間収益（収益率100%なら1年）。決算で収益が入る回数の目安で、イベントやボンビーの影響は入っていません。</p>
+    <h3>買うと得する物件・イベント</h3>
+    <ul class="panel spec" id="spec"></ul>
+  </section>
+
+  <section id="v-cards" data-view="cards" hidden>
+    <img class="secchara" src="img/official/flow_chara_2.webp" width="201" height="176" alt="" loading="lazy"><h2>カード</h2>
+    <h3>いまのおすすめ</h3>
+    <ul class="panel advice" id="cardadvice"></ul>
+    <h3>主なカードの効果</h3>
+    <div class="search"><input id="card-q" type="search" placeholder="カード名・効果で探す" aria-label="カードを探す" maxlength="20" enterkeyhint="search"></div>
+    <ul class="panel cardinfo" id="cardinfo"></ul>
+    <h3>カードの回し方</h3>
+    <ol class="panel steps" id="steps"></ol>
+    <h3>最初に止まるともらえる駅</h3>
+    <ul class="panel free" id="free"></ul>
+    <h3>カード売り場の品ぞろえ</h3>
+    <ul class="panel shop" id="shop"></ul>
+    <p class="note" id="shopnote"></p>
+    <p class="note">1〜49年目の品ぞろえです（50年目以降は変わります）。売り場は数年ごとに価格が倍になります。ナイスカード駅は強いカードが出ますが、デビル系や時限爆弾も混ざります。</p>
+  </section>
+
+  <div class="src">
+    <details class="panel backup"><summary>データの保存と復元</summary>
+      <p class="note">入力はこの端末のブラウザに自動で保存されます。機種変更やブラウザの切り替えに備えて、ファイルに書き出せます。</p>
+      <div class="btnrow">
+        <button type="button" class="soft-btn" data-backup="export">ファイルに書き出す</button>
+        <label class="soft-btn filebtn">ファイルから戻す<input type="file" id="restore-file" accept="application/json,.json"></label>
+        <button type="button" class="soft-btn danger" data-backup="reset">入力をすべて消す</button>
+      </div>
+    </details>
+    <p class="note" id="srcnote"></p>
+    <details><summary>出典と確認状況</summary>
+      <div id="verify"></div>
+      <ul id="sources"></ul>
+      <p class="note">駅の名前・よみ・盤面上の位置・物件名：公式サイト「まるっと全駅！マップ」より。ゲームの画面写真は使用していません。ロゴ・キャラクター画像は「桃太郎電鉄2」公式サイト（KONAMI）の素材を、許可を得て使用しています。見出しの桃・雲・名所の帯・東西のスタンプも公式サイトの素材です。</p>
+    </details>
+  </div>
+</main>
+
+<nav class="tabs" aria-label="画面の切り替え"><div>
+  <a href="#plan" data-tab="plan"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="18" r="2.4"/><path d="M8.4 18H15a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h4"/><path d="M17 2.5v6M17 3l4 1.5-4 1.5"/></svg>プラン</a>
+  <a href="#year" data-tab="year"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18"/><circle cx="6" cy="12" r="2.4" fill="var(--surface)"/><circle cx="12" cy="12" r="2.4" fill="var(--surface)"/><circle cx="18" cy="12" r="2.4" fill="var(--surface)"/></svg>年別</a>
+  <a href="#map" data-tab="map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6-5.6-6-10a6 6 0 1 1 12 0c0 4.4-6 10-6 10z"/><circle cx="12" cy="11" r="2"/></svg>地図</a>
+  <a href="#heroes" data-tab="heroes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.9 3.1-6.4 7-6.4s7 2.5 7 6.4"/></svg>ヒーロー</a>
+  <a href="#props" data-tab="props"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V9l7-5 7 5v11"/><path d="M10 20v-5h4v5"/><path d="M3 20h18"/></svg>物件</a>
+  <a href="#cards" data-tab="cards"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="7" width="12" height="14" rx="2"/><path d="M8 4h10a2 2 0 0 1 2 2v11"/></svg>カード</a>
+</div></nav>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="js/stations.js"></script>
+<script src="js/data.js"></script>
+<script src="js/plan-data.js"></script>
+<script src="js/verify.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
