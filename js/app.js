@@ -7,7 +7,7 @@ const store = {
 };
 const VIEWS = ["plan", "year", "map", "heroes", "props", "cards"];
 /* month: 1〜12 か null（未設定）。cards: 登録したカードのid配列か null（未登録＝手持ちを考えない）。other: 登録外のカードの枚数 */
-const state = { cardN: {}, ed: "east", N: 17, year: 1, region: "all", filter: "all", sel: null, view: "plan", from: null, to: null, money: null, mapPick: null,
+const state = { cardN: {}, cardF: "進行系", cardRegQ: "", ed: "east", N: 17, year: 1, region: "all", filter: "all", sel: null, view: "plan", from: null, to: null, money: null, mapPick: null,
   month: null, playMode: "solo", goal: "balance", cards: null, other: 0, mapq: "", heroq: "", heroF: "all", propq: "", propF: "all", cardq: "" };
 const GOALS = { balance: "バランス", asset: "物件・ヒーロー重視", card: "カード重視" };
 const MAXCARDS = 20;
@@ -57,7 +57,7 @@ function restore() {
   state.playMode = store.get("playMode", "solo") === "multi" ? "multi" : "solo";
   const g = store.get("goal", "balance"); state.goal = GOALS[g] ? g : "balance";
   state.cards = null;
-  try { const c = JSON.parse(store.get("cards", "null")); if (Array.isArray(c)) state.cards = c.filter((id) => CARD_INFO.some((x) => x.id === id)); } catch (e) {}
+  try { const c = JSON.parse(store.get("cards", "null")); if (Array.isArray(c)) state.cards = c.filter((id) => !!CARD_BY[id]); } catch (e) {}
   state.cardN = {};
   try { const n = JSON.parse(store.get("cardn", "{}")) || {}; (state.cards || []).forEach((id) => { const v = parseInt(n[id], 10); state.cardN[id] = v >= 1 && v <= 9 ? v : 1; }); } catch (e) { (state.cards || []).forEach((id) => { state.cardN[id] = 1; }); }
   const o = parseInt(store.get("other", "0"), 10); state.other = o >= 0 && o <= MAXCARDS ? o : 0;
@@ -66,7 +66,7 @@ function restore() {
 restore();
 const cardCount = () => (state.cards ? state.cards.reduce((n, id) => n + (state.cardN[id] || 1), 0) + state.other : null);
 const hasCard = (id) => !!state.cards && state.cards.includes(id);
-const hasTour = () => !!state.cards && CARD_INFO.some((c) => c.tour && state.cards.includes(c.id));
+const hasTour = () => !!state.cards && state.cards.some((id) => CARD_BY[id] && CARD_BY[id].tour);
 
 const phaseIndex = (y) => PHASES.findIndex((p) => y >= p.from && y <= p.to);
 const oku = (c) => { const man = Math.round(c * 10000); const o = Math.floor(man / 10000); const r = man % 10000; return (o ? o + "億" : "") + (r ? r + "万" : "") || "0"; };
@@ -363,7 +363,7 @@ function stopValue(p) {
     }
     case "D": {
       if (!state.cards) return { v: y >= 2 ? 48 : 30, why: "周遊カードや刀狩りをもう1枚に増やせる", tag: "カードを増やす" };
-      const good = CARD_INFO.filter((c) => (c.tour || c.id === "katana" || c.id === "hoshi") && state.cards.includes(c.id)).map((c) => c.n);
+      const good = state.cards.map((id) => CARD_BY[id]).filter((c) => c && (c.tour || c.id === "katana" || c.id === "hoshi")).map((c) => c.n);
       return good.length ? { v: 64, why: `手持ちの${good.join("・")}を増やせる（周遊カードは回数も初期化）`, tag: "いま増やせる", go: true } : { v: 14, why: "増やす価値のあるカード（周遊・刀狩りなど）を持っていない", tag: "増やすカードなし" };
     }
     case "L": {
@@ -488,7 +488,13 @@ function renderSetup() {
   $("game-sum").textContent = `${d.label}・${N}年・${state.playMode === "multi" ? "複数人" : "ひとり"}`;
   $("presets").innerHTML = [3, 5, 10, 17, 20, 30, 50, 100].map((n) => `<button type="button" class="chip" data-nset="${n}" aria-pressed="${n === N}">${n}年</button>`).join("");
   document.querySelectorAll("[data-mappick]").forEach((b) => b.setAttribute("aria-pressed", String(state.mapPick === b.dataset.mappick)));
-  $("cardreg").innerHTML = CARD_INFO.filter((c) => c.id !== "m229" || state.ed === "east").map((c) => { const n = hasCard(c.id) ? state.cardN[c.id] || 1 : 0; return `<div class="crow"><button type="button" class="card-toggle" data-card="${c.id}" aria-pressed="${n > 0}">${c.n}</button><button type="button" class="cstep" data-cardd="${c.id}" data-d="-1" aria-label="${c.n}を1枚減らす"${n ? "" : " disabled"}>−</button><b class="num">${n}</b><button type="button" class="cstep" data-cardd="${c.id}" data-d="1" aria-label="${c.n}を1枚増やす">＋</button></div>`; }).join("");
+  /* カードの登録：全114種（公式の一覧）。分類か「持っている」で切り替え、名前で探せる */
+  const F = state.cardF, cq = kata2hira(state.cardRegQ || "");
+  const tabs = [["have", `持っている（${(state.cards || []).length}）`]].concat(CARD_GROUPS.map(([g, l]) => [g, `${g}（${l.length}）`]));
+  $("cardtabs").innerHTML = tabs.map(([k, n]) => `<button type="button" class="chip" data-cardf="${k}" aria-pressed="${!cq && F === k}">${n}</button>`).join("");
+  const shown = CARDS.filter((c) => (c.id !== "m229" || state.ed === "east") && (cq ? kata2hira(c.n).includes(cq) : F === "have" ? hasCard(c.id) : c.g === F));
+  $("cardreg").innerHTML = shown.length ? shown.map((c) => { const n = hasCard(c.id) ? state.cardN[c.id] || 1 : 0; return `<div class="crow"><button type="button" class="card-toggle" data-card="${esc(c.id)}" aria-pressed="${n > 0}">${esc(c.n)}</button><button type="button" class="cstep" data-cardd="${esc(c.id)}" data-d="-1" aria-label="${esc(c.n)}を1枚減らす"${n ? "" : " disabled"}>−</button><b class="num">${n}</b><button type="button" class="cstep" data-cardd="${esc(c.id)}" data-d="1" aria-label="${esc(c.n)}を1枚増やす">＋</button></div>`; }).join("")
+    : `<p class="note">${cq ? "その名前のカードは見つかりません。" : "まだ何も持っていません。分類を選んで、持っているカードを足してください。"}</p>`;
   $("other-n").textContent = state.other;
   const cc = cardCount();
   $("cardreg-note").textContent = cc == null
@@ -620,6 +626,7 @@ function saveCards() { store.set("cards", state.cards ? JSON.stringify(state.car
   else if (id === "card-q") { state.cardq = q; renderCards(); }
   else { state.mapq = kata2hira(q); const all = places(), exact = all.find((p) => p.n === state.mapq), hits = state.mapq ? all.filter(matchFilter) : []; state.sel = exact ? exact.n : hits.length === 1 ? hits[0].n : null; renderMap(); renderDetail(); renderGroups(); }
 }));
+$("cardreg-q").addEventListener("input", (e) => { state.cardRegQ = e.target.value.trim().slice(0, 20); renderSetup(); });
 $("todo").addEventListener("change", (e) => { const c = e.target.closest("[data-check]"); if (!c) return; setCheck(state.year, c.dataset.check, c.checked); c.closest("li").classList.toggle("done", c.checked); });
 
 /* ---------- ヒーロー・物件・カード・月 ---------- */
@@ -682,7 +689,10 @@ function renderCards() {
   $("cardadvice").innerHTML = cardAdvice().map(([ic, t, s]) => `<li><span class="ic" aria-hidden="true">${ic}</span><b>${esc(t)}</b><span>${esc(s)}</span></li>`).join("");
   const list = CARD_INFO.filter((c) => (c.id !== "m229" || state.ed === "east") && hit(q, c.n, c.e, c.get));
   list.sort((a, b) => hasCard(b.id) - hasCard(a.id));   // 手持ちを上に
-  $("cardinfo").innerHTML = list.length ? list.map((c) => `<li><b>${esc(c.n)}${hasCard(c.id) ? `<span class="own">手持ち ${state.cardN[c.id] || 1}枚</span>` : ""}<span class="conf ${c.st === "ok" ? "ok" : c.st === "est" ? "est" : "un"}">${CONF[c.st]}</span></b><span>${esc(c.e)}</span><span>使いどころ：${esc(c.use)}（目安）</span><span>入手：${esc(c.get)}</span></li>`).join("") : `<li><span>条件に合うカードがありません。</span></li>`;
+  /* 効果を収録していないカードを持っているときは、名前と枚数だけ出す */
+  const others = (state.cards || []).map((id) => CARD_BY[id]).filter((c) => c && !c.info && hit(q, c.n));
+  const otherHtml = others.map((c) => `<li><b>${esc(c.n)}<span class="own">手持ち ${state.cardN[c.id] || 1}枚</span><span class="conf un">効果は未収録</span></b><span>${esc(c.g)}のカード。公式の一覧にあるのは名前だけで、効果はまだ確認できていません。</span></li>`).join("");
+  $("cardinfo").innerHTML = otherHtml + (list.length ? list.map((c) => `<li><b>${esc(c.n)}${hasCard(c.id) ? `<span class="own">手持ち ${state.cardN[c.id] || 1}枚</span>` : ""}<span class="conf ${c.st === "ok" ? "ok" : c.st === "est" ? "est" : "un"}">${CONF[c.st]}</span></b><span>${esc(c.e)}</span><span>使いどころ：${esc(c.use)}（目安）</span><span>入手：${esc(c.get)}</span></li>`).join("") : otherHtml ? "" : `<li><span>条件に合うカードがありません。</span></li>`);
   $("steps").innerHTML = d.loop.map((s) => `<li><span>${esc(s)}</span></li>`).join("");
   $("free").innerHTML = d.free.map((f) => `<li><b>${esc(f.s)}<small>${esc(f.p)}</small></b><span>${esc(f.m ? f.m[state.playMode === "multi" ? 1 : 0] : f.c)}</span></li>`).join("");
   $("shop").innerHTML = d.shops.filter((s) => hit(q, s.st, ...s.cards)).map((s) => `<li><span class="rk ${s.r === "—" ? "B" : s.r}" ${s.r === "—" ? 'aria-label="評価なし"' : ""}>${s.r}</span><b>${esc(s.st)}</b><div class="cs">${s.cards.map((c) => `<span${HOT.some((x) => c.startsWith(x)) ? ' class="hot"' : ""}>${esc(c)}</span>`).join("")}</div></li>`).join("");
@@ -830,6 +840,7 @@ document.addEventListener("click", (e) => {
     const v = ds.money === "clear" ? null : Math.max(0, Math.min(99999, Math.round(((state.money || 0) + parseFloat(ds.money)) * 10000) / 10000));
     state.money = v; store.set("money", v == null ? null : String(v)); $("in-money").value = v == null ? "" : v; renderPlan(); renderHeroes(); renderProps();
   }
+  else if (ds.cardf) { state.cardF = ds.cardf; state.cardRegQ = ""; $("cardreg-q").value = ""; renderSetup(); }
   else if (ds.nextmonth) nextMonth();
   else if (ds.startgame) { store.set("started", "1"); $("gamesetup").open = false; renderSetup(); toast(`${ED[state.ed].label}・${state.N}年で始めます`); }
   else if (ds.newgame) { if (armed(b, "もう一度押すと、入力を消して最初から")) newGame(); }

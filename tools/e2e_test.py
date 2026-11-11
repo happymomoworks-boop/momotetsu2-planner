@@ -88,11 +88,11 @@ with sync_playwright() as p:
     before = text(pg, ".rlist") if pg.locator(".rlist").count() else ""
     pg.click("[data-card='tokkyu']"); pg.wait_for_timeout(80)
     with_tour = text(pg, ".rlist") if pg.locator(".rlist").count() else ""
-    pg.click("[data-card='tokkyu']"); pg.click("[data-card='katana']"); pg.wait_for_timeout(80)
+    pg.click("[data-card='tokkyu']"); (pg.click("[data-cardf='便利系']"), pg.click("[data-card='katana']"), pg.click("[data-cardf='進行系']")); pg.wait_for_timeout(80)
     no_tour = text(pg, ".rlist") if pg.locator(".rlist").count() else ""
     check("周遊カードありで大網白里（周遊駅）が『いま回復できる』", "大網白里" in with_tour and "いま回復できる" in with_tour, with_tour[:400])
     check("周遊カードなしだと大網白里を寄り道に出さない", "大網白里" not in no_tour, no_tour[:400])
-    pg.click("[data-card='katana']")
+    (pg.click("[data-cardf='便利系']"), pg.click("[data-card='katana']"), pg.click("[data-cardf='進行系']"))
     # 作戦
     pg.select_option("#in-goal", "card"); pg.wait_for_timeout(60)
     g_card = text(pg, ".rlist")
@@ -133,6 +133,15 @@ with sync_playwright() as p:
     check("カード1枚以下で『カードを補充する』が出る", "カードを補充する" in text(pg, "#planout"))
     pg.click("[data-cardd='tokkyu'][data-d='-1']"); pg.wait_for_timeout(60)
     check("0枚にすると持っていない扱い", pg.evaluate("JSON.stringify(state.cards)") == "[]")
+    check("カードは全114種から選べる", pg.evaluate("CARDS.length") == 114)
+    pg.click("[data-cardf='デビル系']"); pg.wait_for_timeout(60)
+    check("分類の切り替え（デビル系は14種）", pg.locator("#cardreg .crow").count() == 14)
+    pg.fill("#cardreg-q", "いえろー"); pg.wait_for_timeout(80)
+    check("カード名をひらがなで検索（イエロー）", pg.locator("#cardreg .crow").count() == 1 and "イエロー" in text(pg, "#cardreg"))
+    pg.click("#cardreg .card-toggle"); pg.wait_for_timeout(60)
+    check("効果未収録のカードも登録できる", pg.evaluate("cardCount()") == 1 and pg.evaluate("state.cards[0]") == "イエローカード")
+    pg.click("a[data-tab='cards']"); check("未収録カードは『効果は未収録』と出る", "効果は未収録" in text(pg, "#cardinfo")); pg.click("a[data-tab='plan']")
+    pg.click("#cardreg .card-toggle"); pg.fill("#cardreg-q", ""); pg.click("[data-cardf='進行系']"); pg.wait_for_timeout(60)
     pg.click("a[data-tab='cards']"); check("カード画面に使いどころが出る", "使いどころ" in text(pg, "#cardinfo")); pg.click("a[data-tab='plan']")
     # 保存と再読み込み
     pg.reload(wait_until="domcontentloaded"); pg.wait_for_timeout(400)

@@ -110,6 +110,8 @@
         <summary>カードと作戦<span id="more-sum"></span></summary>
         <div class="f">
           <span class="lab" id="cardreg-label">いま持っているカード（名前をタップで持つ・持たない、＋−で枚数）</span>
+          <div class="search"><input id="cardreg-q" type="search" placeholder="カード名で探す（全114種）" aria-label="カード名で探す" maxlength="20" enterkeyhint="search"></div>
+          <div class="chips" id="cardtabs" role="group" aria-label="カードの分類"></div>
           <div class="cardreg" id="cardreg" role="group" aria-labelledby="cardreg-label"></div>
           <div class="nrow small"><span>ほかのカード</span><button type="button" data-other="-1" aria-label="ほかのカードを1枚減らす">−</button><b id="other-n" class="num">0</b><span>枚</span><button type="button" data-other="1" aria-label="ほかのカードを1枚増やす">＋</button></div>
           <p class="note" id="cardreg-note"></p>
@@ -201,7 +203,7 @@
     <img class="secchara" src="img/official/flow_chara_2.webp" width="201" height="176" alt="" loading="lazy"><h2>カード</h2>
     <h3>いまのおすすめ</h3>
     <ul class="panel advice" id="cardadvice"></ul>
-    <h3>主なカードの効果</h3>
+    <h3>手持ちと主なカードの効果</h3>
     <div class="search"><input id="card-q" type="search" placeholder="カード名・効果で探す" aria-label="カードを探す" maxlength="20" enterkeyhint="search"></div>
     <ul class="panel cardinfo" id="cardinfo"></ul>
     <h3>カードの回し方</h3>
