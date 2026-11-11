@@ -827,3 +827,20 @@ details.more.first { border-top: 0; padding-top: 0; }
 [data-armed] { background: var(--crit) !important; color: #fff !important; border-color: var(--crit) !important; }
 .nrow .soft-btn { width: auto; height: auto; min-height: 48px; flex: 1 1 auto; font-size: 14.5px; white-space: nowrap; box-shadow: none; border: 2px solid var(--sky-line); background: var(--sky); color: var(--on-sky); padding: 6px 12px; }
 .nrow .soft-btn[data-armed] { white-space: normal; }
+
+/* 線路と、駅でないマス（赤・青・黄） */
+.trk { fill: none; stroke: #6b6b6b; stroke-width: .22; stroke-linecap: round; }
+.trk.sea { stroke: #fff; stroke-width: .16; }
+.msq { stroke: rgb(0 0 0 / .35); stroke-width: .06; }
+.msq-R { fill: var(--sq-red); } .msq-B { fill: var(--sq-blue); } .msq-Y { fill: var(--sq-yellow); }
+
+/* 記録ボタン・チェック欄・履歴 */
+.chk { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 15px; font-weight: 700; color: var(--ink); }
+.chk input { width: 24px; height: 24px; min-height: 0; flex: none; accent-color: var(--accent); margin: 0; }
+.ownbtn { grid-column: 1 / -1; justify-self: start; min-height: 42px; padding: 4px 16px; border-radius: 999px; border: 2px solid color-mix(in srgb, var(--win-line) 55%, var(--win)); background: var(--surface); color: var(--ink-2); font-size: 13.5px; font-weight: 900; }
+.hrow .ownbtn { grid-column: 2 / -1; }
+.ownbtn[aria-pressed="true"] { background: var(--good); border-color: var(--good); color: #fff; }
+#hist-wrap { display: flex; flex-direction: column; gap: 6px; }
+#hist-wrap[hidden] { display: none; }
+#hist-wrap .rowlabel { margin: 0; }
+.f input[type="checkbox"] { padding: 0; border-radius: 4px; }

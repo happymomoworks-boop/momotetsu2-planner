@@ -17,6 +17,12 @@ from PIL import Image, ImageDraw
 
 root = pathlib.Path(__file__).resolve().parent.parent
 cache = pathlib.Path(sys.argv[1]); check = "--check" in sys.argv
+DEBUG = set()   # 調べたい区間の始点（左か上のマス）
+# 自動では読み取れなかったが、地図を拡大して線が見えることを目で確かめたつながり（離島の駅と、隣の港のマス）。2026-11-12
+MANUAL = {"east": [((1426, 3874), (1426, 3922))],                       # 佐渡の港（黄）― 佐渡
+          "west": [((1714, 1282), (1714, 1330)),                         # 萩の沖の赤マス ― 萩（見島への航路）
+                   ((838, 3790), (838, 3838)), ((598, 3982), (598, 4030))]}  # 大宜味の沖の青マス ― 大宜味、那覇の沖の青マス ― 那覇
+ed_now = [None]
 SIZE = {"east": (17, 26), "west": (20, 18)}
 URL = "https://www.konami.com/games/momotetsu/2/map/area/images/map/%s/0/%d-%d.webp"
 
@@ -62,28 +68,41 @@ def build(im, stn):
     def water(p):
         if p is None: return False
         h, s, v = hsv(p); return 0.5 < h < 0.62 and s > 0.6
+    def white(p): return p is not None and hsv(p)[1] < 0.15 and hsv(p)[2] > 0.85
     def light(p): return p is not None and hsv(p)[1] < 0.3 and hsv(p)[2] > 0.7
     edges = {}
     for (x, y) in nodes:
         for dx, dy in ((1, 0), (0, 1)):
             nxt = next((st for st in range(12, 400, 12) if (x + dx * st, y + dy * st) in nodes), None)
             if not nxt: continue
-            tot = r = sl = g = 0
+            tot = r = sl = g = th = wl = 0
             for st in range(11, nxt - 10):
                 cx, cy = x + dx * st, y + dy * st
                 tot += 1
                 c = get(cx, cy)
                 g += gray(c) or any(light(get(cx + dy * o, cy + dx * o)) for o in (-2, -1, 1, 2))
                 r += any(dark(get(cx - dy * o, cy - dx * o)) for o in (2, 3, 4)) and any(dark(get(cx + dy * o, cy + dx * o)) for o in (2, 3, 4))
+                w = any(white(get(cx + dy * o, cy + dx * o)) for o in (-1, 0, 1))
+                wl += w or any((lambda q: q is not None and hsv(q)[1] < 0.14 and hsv(q)[2] > 0.55)(get(cx + dy * o, cy + dx * o)) for o in (-1, 0, 1))   # 白い線か、桟橋の灰色
+                th += w and not white(get(cx + dy * 6, cy + dx * 6)) and not white(get(cx - dy * 6, cy - dx * 6))   # 白くて細い線（航路）
                 sl += any(light(get(cx + dy * o, cy + dx * o)) for o in (-2, -1, 0, 1, 2)) and water(get(cx + dy * 6, cy + dx * 6)) and water(get(cx - dy * 6, cy - dx * 6))
             if tot < 4: continue
+            if (x, y) in DEBUG: print('debug', (x, y), (dx, dy), nxt, 'tot', tot, 'rail', r, 'sea', sl, 'gray', g, 'thin', th, 'line', wl)
             if r / tot >= 0.2 and g / tot >= 0.85: edges[((x, y), (x + dx * nxt, y + dy * nxt))] = "r"
             elif sl / tot >= 0.4 and g / tot >= 0.8: edges[((x, y), (x + dx * nxt, y + dy * nxt))] = "s"
+            elif sl / tot >= 0.85: edges[((x, y), (x + dx * nxt, y + dy * nxt))] = "s"   # 線が薄い色でも、ずっと海の上を通っている
+            elif th / tot >= 0.85 and r / tot < 0.2: edges[((x, y), (x + dx * nxt, y + dy * nxt))] = "s"   # 浅瀬や岸の近くを通る航路
+            elif wl / tot >= 0.9 and th / tot >= 0.25 and r / tot < 0.2: edges[((x, y), (x + dx * nxt, y + dy * nxt))] = "s"   # 桟橋に上がる区間
+            elif sl / tot >= 0.12 and g / tot >= 0.9: edges[((x, y), (x + dx * nxt, y + dy * nxt))] = "s"   # 航路が岸・桟橋に上がる区間（一部だけ海の上）
+    for a, b in MANUAL.get(ed_now[0], []):
+        if a in nodes and b in nodes: edges[(a, b)] = "s"
+        else: print("手で足すつながりの端にマスが無い", a, b)
     return nodes, edges
 
 stn = stations(); out = {}; report = []
 for ed in ("east", "west"):
     im = board(ed)
+    ed_now[0] = ed
     nodes, edges = build(im, stn[ed])
     # つながっていない部分を数える
     adj = collections.defaultdict(list)

@@ -84,6 +84,7 @@
       <div class="f">
         <span class="lab">いま</span>
         <div class="nrow"><b id="now-y" class="nowy num"></b><select id="in-month" aria-label="いまの月" class="w-month"><option value="">わからない</option><option value="4">4月</option><option value="5">5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option></select><button type="button" class="soft-btn" data-nextmonth="1">次の月へ ▶</button></div>
+        <label class="chk"><input type="checkbox" id="in-bonbi"> 貧乏神が付いている</label>
         <p class="note">月ごとの「やること」と、止まらない場所に反映します。3月の次は、年が1つ進んで4月になります。</p>
       </div>
       <div class="f" data-pick="from">
@@ -95,6 +96,7 @@
         <label for="in-to">目的地</label>
         <div class="prow"><input id="in-to" type="text" autocomplete="off" enterkeyhint="done" placeholder="駅名（漢字・ひらがな）" maxlength="20"><button type="button" data-mappick="to" aria-pressed="false">地図で指定</button></div>
         <ul class="sugg" id="sugg-to" hidden></ul>
+        <div id="hist-wrap" hidden><span class="rowlabel">これまでの目的地</span><div class="chips" id="hist" role="group" aria-label="これまでの目的地"></div></div>
         <div class="setup-tools"><button type="button" class="soft-btn" data-swap="1">⇄ いまいる駅と目的地を入れ替える</button></div>
       </div>
       <div class="f">
@@ -117,6 +119,13 @@
           <p class="note" id="cardreg-note"></p>
         </div>
         <div class="f">
+          <span class="lab">相手のようす</span>
+          <label class="chk"><input type="checkbox" id="in-opp-card"> 相手が強いカード（周遊カードなど）を持っている</label>
+          <label class="chk"><input type="checkbox" id="in-opp-prop"> 相手が高い物件を持っている</label>
+          <input id="in-opp-memo" type="text" maxlength="60" placeholder="メモ（例：赤鬼社長が特急周遊2枚）" aria-label="相手のメモ">
+          <p class="note">チェックすると、刀狩り・強奪飛びの使いどころが「やること」に出ます。メモは覚え書きです。</p>
+        </div>
+        <div class="f">
           <label for="in-goal">作戦</label>
           <select id="in-goal">
             <option value="balance">バランス</option>
@@ -131,7 +140,7 @@
     <p class="note">寄る駅の順位と「最優先」は、このアプリ独自の目安です（駅の種類・年・所持金・手持ちカードから点数を付けています）。勝率や期待収益を計算したものではありません。</p>
     <h3 id="ov-title"></h3>
     <ul class="panel ov" id="ov"></ul>
-    <p class="note">駅の位置とマス数は、公式サイト「まるっと全駅！マップ」の盤面をもとにしています。寄り道は盤面の上で通り道に近い駅から選び、マス数は「たて＋よこ」で数えています。線路のつながりは入っていないので、回り道の分だけ実際のマス数は増えます。動く前にゲーム画面で経路を確かめてください。</p>
+    <p class="note">駅の位置とマス数は、公式サイト「まるっと全駅！マップ」の盤面をもとにしています。マス数は、同じマップの画像から読み取った線路をたどって数えた最短の数です（参考値。ゲーム内で全区間を確かめてはいません。斜めの線・ワープ・カードでの移動は入っていません）。動く前にゲーム画面で経路を確かめてください。</p>
   </section>
 
   <section id="v-year" data-view="year" hidden>
@@ -174,7 +183,7 @@
     <h3>駅の数と拠点</h3>
     <div class="tiles" id="tiles"></div>
     <p class="sub" id="base"></p>
-    <p class="note">駅の位置は公式サイト「まるっと全駅！マップ」の盤面と同じです（1マス単位）。小さなマスは物件駅などで、タップすると駅名と物件が出ます。線路は描いていません。「発」「着」はプランで入れたいまいる駅と目的地です。</p>
+    <p class="note">駅の位置は公式サイト「まるっと全駅！マップ」の盤面と同じです（1マス単位）。小さなマスは物件駅などで、タップすると駅名と物件が出ます。線路と、駅でないマス（赤・青・黄）は、公式マップの画像から読み取ったものです。「発」「着」はプランで入れたいまいる駅と目的地です。</p>
   </section>
 
   <section id="v-heroes" data-view="heroes" hidden>
@@ -245,6 +254,7 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="js/stations.js"></script>
+<script src="js/rails.js"></script>
 <script src="js/data.js"></script>
 <script src="js/plan-data.js"></script>
 <script src="js/verify.js"></script>

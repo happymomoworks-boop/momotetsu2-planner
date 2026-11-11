@@ -7,7 +7,7 @@ const store = {
 };
 const VIEWS = ["plan", "year", "map", "heroes", "props", "cards"];
 /* month: 1〜12 か null（未設定）。cards: 登録したカードのid配列か null（未登録＝手持ちを考えない）。other: 登録外のカードの枚数 */
-const state = { cardN: {}, cardF: "進行系", cardRegQ: "", ed: "east", N: 17, year: 1, region: "all", filter: "all", sel: null, view: "plan", from: null, to: null, money: null, mapPick: null,
+const state = { own: { p: [], h: [] }, bonbi: false, opp: { card: false, prop: false, memo: "" }, hist: [], cardN: {}, cardF: "進行系", cardRegQ: "", ed: "east", N: 17, year: 1, region: "all", filter: "all", sel: null, view: "plan", from: null, to: null, money: null, mapPick: null,
   month: null, playMode: "solo", goal: "balance", cards: null, other: 0, mapq: "", heroq: "", heroF: "all", propq: "", propF: "all", cardq: "" };
 const GOALS = { balance: "バランス", asset: "物件・ヒーロー重視", card: "カード重視" };
 const MAXCARDS = 20;
@@ -35,6 +35,42 @@ const selectable = (p) => !p.off;
 /* 距離の単位はマス。dist＝盤面上の直線（寄り道の判定に使う）。masu＝たて＋よこ（線路がまっすぐ通っている場合の最短の目安） */
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const masu = (a, b) => Math.max(1, Math.round(Math.abs(a.x - b.x) + Math.abs(a.y - b.y)));
+/* ---------- 線路（js/rails.js：公式マップの画像から読み取ったマスとつながり） ----------
+   1本のつながり＝1マス。最短のマス数は幅優先探索で数える。画像からの読み取りなので、ゲーム内で全区間を確かめたものではない。 */
+const railCache = {};
+function rail() {
+  const ed = state.ed; if (railCache[ed]) return railCache[ed];
+  const R = typeof RAILS !== "undefined" && RAILS[ed]; if (!R) return (railCache[ed] = null);
+  const adj = R.n.map(() => []); R.e.forEach(([a, b]) => { adj[a].push(b); adj[b].push(a); });
+  const P = places(), byXY = new Map(R.n.map((n, i) => [n[0] + "," + n[1], i]));
+  const nodeOf = new Map();   // 場所の名前 → マスの番号
+  R.n.forEach((n, i) => { if (n[3] >= 0 && P[n[3]]) nodeOf.set(P[n[3]].n, i); });
+  P.forEach((p) => { if (!nodeOf.has(p.n)) { const i = byXY.get(p.x * 4 + "," + p.y * 4); if (i != null) nodeOf.set(p.n, i); } });
+  return (railCache[ed] = { R, adj, nodeOf, bfs: {} });
+}
+/* ある場所から全マスへの最短マス数（届かないマスは -1）と、来た道 */
+function railFrom(name) {
+  const g = rail(); if (!g) return null;
+  const from = g.nodeOf.get(name); if (from == null) return null;
+  if (g.bfs[name]) return g.bfs[name];
+  const d = new Int16Array(g.R.n.length).fill(-1), prev = new Int16Array(g.R.n.length).fill(-1), q = [from]; d[from] = 0;
+  for (let h = 0; h < q.length; h++) { const x = q[h]; for (const y of g.adj[x]) if (d[y] < 0) { d[y] = d[x] + 1; prev[y] = x; q.push(y); } }
+  const keys = Object.keys(g.bfs); if (keys.length > 12) delete g.bfs[keys[0]];
+  return (g.bfs[name] = { d, prev, from });
+}
+/* 2つの場所の間の最短マス数。線路のデータで数えられないときは null */
+function railMasu(a, b) {
+  const f = railFrom(a.n), g = rail(); if (!f) return null;
+  const t = g.nodeOf.get(b.n); if (t == null) return null;
+  return f.d[t] >= 0 ? f.d[t] : null;
+}
+/* a から b までの道筋（マスの座標の列。単位はマス） */
+function railPath(a, b) {
+  const f = railFrom(a.n), g = rail(); if (!f) return null;
+  let t = g.nodeOf.get(b.n); if (t == null || f.d[t] < 0) return null;
+  const out = []; for (; t >= 0; t = f.prev[t]) out.push([g.R.n[t][0] / 4, g.R.n[t][1] / 4]);
+  return out.reverse();
+}
 const boardCache = {};
 function boardBox() {
   const ed = state.ed; if (boardCache[ed]) return boardCache[ed];
@@ -47,6 +83,18 @@ function loadEd() {
   const f = store.get("from." + state.ed, START[state.ed]), t = store.get("to." + state.ed, null);
   state.from = has(f) ? f : START[state.ed];   // 以前の版の「◯◯付近」など、駅にない名前は初期値に戻す
   state.to = has(t) ? t : null;
+  /* 版ごとの記録：買った物件・仲間にしたヒーロー、目的地の履歴 */
+  state.own = { p: [], h: [] }; state.hist = [];
+  try { const o = JSON.parse(store.get("own." + state.ed, "{}")) || {}; ["p", "h"].forEach((k) => { if (Array.isArray(o[k])) state.own[k] = o[k].filter((x) => typeof x === "string").slice(0, 200); }); } catch (e) {}
+  try { const hs = JSON.parse(store.get("hist." + state.ed, "[]")); if (Array.isArray(hs)) state.hist = hs.filter(has).slice(0, 6); } catch (e) {}
+}
+const saveOwn = () => store.set("own." + state.ed, JSON.stringify(state.own));
+const ownsHero = (name) => state.own.h.includes(name);
+const propKey = (p) => p.s + "／" + p.n;
+const ownsProp = (p) => state.own.p.includes(propKey(p));
+function pushHist(name) {
+  if (!name) return;
+  state.hist = [name].concat(state.hist.filter((x) => x !== name)).slice(0, 6); store.set("hist." + state.ed, JSON.stringify(state.hist));
 }
 function restore() {
   const ed = store.get("ed", "east"); state.ed = ED[ed] ? ed : "east";
@@ -61,6 +109,8 @@ function restore() {
   state.cardN = {};
   try { const n = JSON.parse(store.get("cardn", "{}")) || {}; (state.cards || []).forEach((id) => { const v = parseInt(n[id], 10); state.cardN[id] = v >= 1 && v <= 9 ? v : 1; }); } catch (e) { (state.cards || []).forEach((id) => { state.cardN[id] = 1; }); }
   const o = parseInt(store.get("other", "0"), 10); state.other = o >= 0 && o <= MAXCARDS ? o : 0;
+  state.bonbi = store.get("bonbi", "") === "1";
+  state.opp = { card: store.get("opp.card", "") === "1", prop: store.get("opp.prop", "") === "1", memo: String(store.get("opp.memo", "")).slice(0, 60) };
   loadEd();
 }
 restore();
@@ -109,10 +159,15 @@ function tasksFor(ed, y, N, max, ctx) {
     return t.cost <= money * 2 ? { pr: pr - 10, d: `${d}（あと${gap}）` } : { pr: pr - 40, d: `${d}（まず${oku(t.cost)}まで貯める）` };
   };
   const list = TASKS[ed].concat(CLOSING).filter(ok).concat(c.month ? monthTasks(ed, c.month, y, N) : []);
+  if (c.now && state.bonbi) list.push({ k: "warn", pr: 130, t: "貧乏神をなすりつける", d: "毎ターン悪行をされる。変身する前に、ほかの社長になすりつける。物件の購入や寄り道より先に" });
+  if (c.now && state.opp.card) list.push(hasCard("katana")
+    ? { k: "card", pr: 95, t: "刀狩りカードを使う", d: "相手の強いカードを1枚奪える（低確率で2枚）" }
+    : { k: "card", pr: 68, t: "刀狩りを手に入れる", d: ed === "east" ? "福生・袋田の売り場で買える。三方の刀狩り駅でも同じ効果" : "福崎・中百舌鳥などの売り場で買える。大江の刀狩り駅でも同じ効果" });
+  if (c.now && state.opp.prop && hasCard("goudatsu")) list.push({ k: "card", pr: 94, t: "強奪飛びカードを使う", d: "相手の物件駅へ移動して、物件を1つ奪える" });
   if (c.cards != null && c.cards <= 1) list.push({ k: "card", pr: 89, t: "カードを補充する", d: `手持ちが${c.cards}枚。目的地へ急ぐより先に、黄色のカード駅かカード売り場に止まる（切れる前に補充するのが基本）` });
   return list.map((t) => ({ k: t.k, t: t.t, ...fit(t) })).sort((a, b) => b.pr - a.pr).slice(0, max || 6).map(({ k, t, d }) => ({ k, t, d }));
 }
-const nowCtx = () => ({ money: state.money, month: state.month, goal: state.goal, cards: cardCount() });
+const nowCtx = () => ({ now: true, money: state.money, month: state.month, goal: state.goal, cards: cardCount() });
 /* 年別のチェックリスト（終えたやること）。キーは chk.<ed>.<年> */
 function checks(y) { try { const a = JSON.parse(store.get(`chk.${state.ed}.${y}`, "[]")); return Array.isArray(a) ? a.filter((x) => typeof x === "string") : []; } catch (e) { return []; } }
 function setCheck(y, title, on) {
@@ -237,9 +292,15 @@ function labelSvg(p, FS, bold) { const L = p.L; return L ? `<text x="${L.tx}" y=
 const landCache = {};
 function landSvg() {
   const ed = state.ed; if (landCache[ed]) return landCache[ed];
-  const P = places().filter((p) => !p.off);
+  const P = places().filter((p) => !p.off), g = rail();
   const ring = (r, cls) => P.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="${r}" class="${cls}"/>`).join("");
-  return (landCache[ed] = `<g class="board" aria-hidden="true">${ring(2.35, "coast")}${ring(1.95, "land")}${P.map((p) => `<rect x="${(p.x - 0.32).toFixed(2)}" y="${(p.y - 0.32).toFixed(2)}" width="0.64" height="0.64" rx="0.14" class="bsq bsq-${p.st}"/>`).join("")}</g>`);
+  let tracks = "", squares = "";
+  if (g) {
+    const N = g.R.n;
+    tracks = `<path class="trk" d="${g.R.e.filter((e) => !e[2]).map(([a, b]) => `M${N[a][0] / 4},${N[a][1] / 4}L${N[b][0] / 4},${N[b][1] / 4}`).join("")}"/><path class="trk sea" d="${g.R.e.filter((e) => e[2]).map(([a, b]) => `M${N[a][0] / 4},${N[a][1] / 4}L${N[b][0] / 4},${N[b][1] / 4}`).join("")}"/>`;
+    squares = N.filter((n) => n[3] < 0).map((n) => `<rect x="${(n[0] / 4 - 0.26).toFixed(2)}" y="${(n[1] / 4 - 0.26).toFixed(2)}" width="0.52" height="0.52" rx="0.1" class="msq msq-${n[2]}"/>`).join("");
+  }
+  return (landCache[ed] = `<g class="board" aria-hidden="true">${ring(2.35, "coast")}${ring(1.95, "land")}${tracks}${squares}${P.map((p) => `<rect x="${(p.x - 0.32).toFixed(2)}" y="${(p.y - 0.32).toFixed(2)}" width="0.64" height="0.64" rx="0.14" class="bsq bsq-${p.st}"/>`).join("")}</g>`);
 }
 
 /* ---------- 駅マップ（一覧用） ---------- */
@@ -320,7 +381,7 @@ function renderDetail() {
   const props = p.props ? p.props.split("|") : [];
   el.innerHTML = `<h3>${badgeHtml(p)}${esc(p.n)}<small>${p.yomi ? esc(p.yomi) + "・" : ""}${TYPES[p.t].n}</small></h3>` +
     (p.d ? `<p>${esc(p.d)}</p>` : "") +
-    (A && A.n !== p.n ? `<p class="note">いまいる${esc(A.n)}から、マス目で約${masu(A, p)}マス</p>` : "") +
+    (A && A.n !== p.n ? `<p class="note">いまいる${esc(A.n)}から、${railMasu(A, p) != null ? `線路で最短${railMasu(A, p)}マス` : `マス目で約${masu(A, p)}マス`}</p>` : "") +
     (props.length ? `<div class="proplist"><span>この駅の物件（公式マップより・${props.length}種）</span>${props.map((x) => `<i>${esc(x)}</i>`).join("")}</div>` : "") +
     (near.length ? `<div class="near"><span>近くの駅</span>${near.map((q) => `<button type="button" data-pin="${esc(q.n)}">${badgeHtml(q)}${esc(q.n)}</button>`).join("")}</div>` : "") +
     (selectable(p) ? `<button type="button" class="cta" data-goto="${esc(p.n)}">ここを目的地にしてプランを作る</button>` : "");
@@ -347,6 +408,7 @@ function stopValue(p) {
     case "H": {
       const h = ED[ed].heroes.find((x) => x.s === p.n); if (!h) return null;
       if (h.fromY && N < h.fromY) return null;
+      if (ownsHero(h.n)) return null;   // もう仲間にした
       const base = { SS: 92, S: 76, A: 56, B: 34, "推": 50 }[h.r] || 40;
       let f, tag, go = false;
       if (h.c == null) { f = 1; tag = "物件1つで仲間に"; go = true; }
@@ -395,27 +457,44 @@ const X_RULE = {
 };
 const xActive = (p) => { const f = X_RULE[p.n]; return !f || f(); };
 const GOAL_MUL = { balance: {}, asset: { hero: 1.3, event: 1.3, card: 0.75 }, card: { card: 1.3, hero: 0.8, event: 0.8 } };
-/* 寄り道の計算。距離はすべて盤面のマス（公式の全駅マップの位置）。線路のつながりは入っていない。
-   候補＝寄り道距離（AC＋CB−AB、直線）が max(4マス, AB×22%) 以内。点数＝価値×作戦の倍率÷(1＋寄り道距離/3)。 */
+/* 寄り道の計算。距離は線路をたどった最短マス数（railFrom）。線路のデータで数えられない場所は、盤面上の直線（dist）で代用する。
+   候補＝寄り道（Aから寄る駅＋寄る駅からB−AからB）が max(4マス, AB×22%) 以内。点数＝価値×作戦の倍率÷(1＋寄り道/4)。 */
 function computePlan() {
   const A = getPlace("from"), B = getPlace("to");
   if (!A || !B || A.n === B.n) return null;
-  const P = places(), AB = dist(A, B), lim = Math.max(4, AB * 0.22), cands = [];
+  const P = places(), g = rail(), fA = railFrom(A.n), fB = railFrom(B.n);
+  const nB = g && g.nodeOf.get(B.n), useRail = !!(fA && fB && nB != null && fA.d[nB] >= 0);
+  const dA = (p) => { if (!useRail) return dist(A, p); const i = g.nodeOf.get(p.n); return i != null && fA.d[i] >= 0 ? fA.d[i] : null; };
+  const dB = (p) => { if (!useRail) return dist(p, B); const i = g.nodeOf.get(p.n); return i != null && fB.d[i] >= 0 ? fB.d[i] : null; };
+  const AB = useRail ? fA.d[nB] : dist(A, B), lim = Math.max(4, AB * 0.22), div = useRail ? 4 : 3, cands = [];
   P.forEach((p) => {
     if (p.n === A.n || p.n === B.n || !"NDLSKFHE".includes(p.t)) return;
-    const a = dist(A, p), b = dist(p, B), det = a + b - AB; if (det > lim) return;
+    const a = dA(p), b = dB(p); if (a == null || b == null) return;
+    const det = a + b - AB; if (det > lim) return;
     const sv = stopValue(p); if (!sv || sv.v <= 0) return;
     const mul = (GOAL_MUL[state.goal] || {})[TYPES[p.t].g] || 1;
-    cands.push({ p, det, score: (sv.v * mul) / (1 + det / 3), ...sv });
+    cands.push({ p, det, a, score: (sv.v * mul) / (1 + det / div), ...sv });
   });
   cands.sort((x, y) => y.score - x.score);
   const picked = [], cnt = {}, cap = { S: 2, N: 2, H: 3, E: 2, D: 1, L: 1, F: 3, K: 1 };
   for (const c of cands) { if (picked.length >= 6) break; if (c.score < 18) continue; if ((cnt[c.p.t] || 0) >= cap[c.p.t]) continue; cnt[c.p.t] = (cnt[c.p.t] || 0) + 1; picked.push(c); }
-  /* 並べ方：いまいる駅→目的地の向きに沿って、手前にある駅から順に（行ったり来たりしない） */
-  const ux = (B.x - A.x) / (AB || 1), uy = (B.y - A.y) / (AB || 1), along = (c) => (c.p.x - A.x) * ux + (c.p.y - A.y) * uy;
-  const order = picked.slice().sort((p, q) => along(p) - along(q));
-  const avoid = P.filter((p) => p.t === "X" && p.n !== B.n && xActive(p) && dist(A, p) + dist(p, B) - AB <= Math.max(1.8, AB * 0.05));
-  return { A, B, AB, masu: masu(A, B), picked: order, avoid };
+  /* 並べ方：いまいる駅から近い順（線路のマス数）。数えられないときは、目的地の向きに沿った順 */
+  const ux = (B.x - A.x) / (dist(A, B) || 1), uy = (B.y - A.y) / (dist(A, B) || 1), along = (c) => (c.p.x - A.x) * ux + (c.p.y - A.y) * uy;
+  const order = picked.slice().sort((p, q) => (useRail ? p.a - q.a : along(p) - along(q)));
+  const avoid = P.filter((p) => { if (p.t !== "X" || p.n === B.n || !xActive(p)) return false; const a = dA(p), b = dB(p); return a != null && b != null && a + b - AB <= Math.max(useRail ? 2 : 1.8, AB * 0.05); });
+  /* 寄る駅を順に回ったときの道筋と合計マス数 */
+  let path = null, total = null;
+  if (useRail) {
+    const seq = [A].concat(order.map((c) => c.p), [B]); path = []; total = 0;
+    for (let i = 0; i + 1 < seq.length; i++) { const leg = railPath(seq[i], seq[i + 1]); if (!leg) { path = null; total = null; break; } total += leg.length - 1; path = path.concat(i ? leg.slice(1) : leg); }
+  }
+  return { A, B, AB, masu: useRail ? AB : masu(A, B), rail: useRail, total, path, picked: order, avoid };
+}
+/* サイコロで届く範囲（最短マス数が出目の合計以内）にある、助言のある駅。ぴったりの目が出るかは別 */
+function reach(max) {
+  const A = getPlace("from"), g = rail(), f = A && railFrom(A.n); if (!f) return null;
+  return places().filter((p) => p.n !== A.n && "NDLSKFHE".includes(p.t)).map((p) => { const i = g.nodeOf.get(p.n); return { p, d: i != null ? f.d[i] : -1, sv: stopValue(p) }; })
+    .filter((x) => x.d > 0 && x.d <= max && x.sv && x.sv.v >= 30).sort((a, b) => a.d - b.d || b.sv.v - a.sv.v).slice(0, 8);
 }
 let routeDrawn = { s: 1, vb: [0, 0, 1, 1] };
 function renderRouteMap(plan) {
@@ -426,7 +505,7 @@ function renderRouteMap(plan) {
     items.push({ n: plan.A.n, x: plan.A.x, y: plan.A.y, ch: "発", role: "start" });
     plan.picked.forEach((c, i) => items.push({ n: c.p.n, x: c.p.x, y: c.p.y, ch: String(i + 1), role: TYPES[c.p.t].g }));
     items.push({ n: plan.B.n, x: plan.B.x, y: plan.B.y, ch: "着", role: "goal" });
-    const xs = items.map((p) => p.x), ys = items.map((p) => p.y);
+    const xs = items.map((p) => p.x).concat((plan.path || []).map((p) => p[0])), ys = items.map((p) => p.y).concat((plan.path || []).map((p) => p[1]));
     let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
     const pad = Math.max(x1 - x0, y1 - y0) * 0.2 + 3.5; x0 -= pad; x1 += pad; y0 -= pad; y1 += pad;
     let w = Math.max(x1 - x0, 16), h = Math.max(y1 - y0, 16); const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
@@ -442,9 +521,9 @@ function renderRouteMap(plan) {
   const R = 12, FS = 13;
   if (items.length) {
     const routePts = items.filter((p) => p.role !== "avoid");
-    const pts = routePts.map((p) => p.x.toFixed(2) + "," + p.y.toFixed(2)).join(" ");
-    h += `<polyline points="${pts}" fill="none" stroke="var(--surface)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
-    h += `<polyline points="${pts}" fill="none" stroke="var(--ink)" stroke-width="3" stroke-dasharray="1 7" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+    const pts = (plan.path || routePts.map((p) => [p.x, p.y])).map((p) => p[0].toFixed(2) + "," + p[1].toFixed(2)).join(" ");
+    h += `<polyline points="${pts}" fill="none" stroke="var(--dest)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+    h += `<polyline points="${pts}" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="1 6" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
     relax(items, s, R, 30); placeLabels(items, vb, s, R, FS);
     items.forEach((p) => {
       let inner = leader(p);
@@ -496,6 +575,10 @@ function renderSetup() {
   $("cardreg").innerHTML = shown.length ? shown.map((c) => { const n = hasCard(c.id) ? state.cardN[c.id] || 1 : 0; return `<div class="crow"><button type="button" class="card-toggle" data-card="${esc(c.id)}" aria-pressed="${n > 0}">${esc(c.n)}</button><button type="button" class="cstep" data-cardd="${esc(c.id)}" data-d="-1" aria-label="${esc(c.n)}を1枚減らす"${n ? "" : " disabled"}>−</button><b class="num">${n}</b><button type="button" class="cstep" data-cardd="${esc(c.id)}" data-d="1" aria-label="${esc(c.n)}を1枚増やす">＋</button></div>`; }).join("")
     : `<p class="note">${cq ? "その名前のカードは見つかりません。" : "まだ何も持っていません。分類を選んで、持っているカードを足してください。"}</p>`;
   $("other-n").textContent = state.other;
+  $("in-bonbi").checked = state.bonbi; $("in-opp-card").checked = state.opp.card; $("in-opp-prop").checked = state.opp.prop;
+  if (document.activeElement !== $("in-opp-memo")) $("in-opp-memo").value = state.opp.memo;
+  $("hist").innerHTML = state.hist.filter((n) => n !== state.to).map((n) => `<button type="button" class="chip" data-sugg="to" data-name="${esc(n)}">${esc(n)}</button>`).join("");
+  $("hist-wrap").hidden = !$("hist").innerHTML;
   const cc = cardCount();
   $("cardreg-note").textContent = cc == null
     ? "まだ登録していません。登録すると、ダビング駅・周遊駅・売り場のおすすめと、夕張・門司港（カードの枚数で起きるイベント）の判定、カードの使いどころが変わります。"
@@ -506,9 +589,9 @@ function renderSetup() {
 function buyList() {
   const d = ED[state.ed], m = state.money;
   if (m == null) return `<div class="panel empty small">所持金を入れると、買える物件と、独占額に届く駅がここに出ます。</div>`;
-  const props = d.props.map((p) => ({ ...p, inc: (p.c * p.r) / 100 })).filter((p) => p.c <= m).sort((a, b) => b.inc - a.inc || a.c - b.c).slice(0, 3);
+  const props = d.props.map((p) => ({ ...p, inc: (p.c * p.r) / 100 })).filter((p) => p.c <= m && !ownsProp(p)).sort((a, b) => b.inc - a.inc || a.c - b.c).slice(0, 3);
   const rk = { SS: 0, S: 1, A: 2, "推": 3, B: 4 };
-  const heroes = d.heroes.filter((x) => x.c != null && x.c <= m && !(x.fromY && state.N < x.fromY)).sort((a, b) => (rk[a.r] ?? 5) - (rk[b.r] ?? 5) || b.c - a.c).slice(0, 2);
+  const heroes = d.heroes.filter((x) => !ownsHero(x.n) && x.c != null && x.c <= m && !(x.fromY && state.N < x.fromY)).sort((a, b) => (rk[a.r] ?? 5) - (rk[b.r] ?? 5) || b.c - a.c).slice(0, 2);
   const li = (k, t, dd) => `<li><span class="tag ${k}">${KIND[k]}</span><b>${esc(t)}</b><span class="d">${esc(dd)}</span></li>`;
   const rows = props.map((p) => li("prop", `${p.s} ${p.n}`, `${oku(p.c)}・収益率${p.r}%・年${oku(p.inc)}`)).concat(heroes.map((x) => li("hero", `${x.s}を独占 → ${x.n}`, `独占額 ${oku(x.c)}。${x.e}`)));
   if (!rows.length) { const cheap = d.props.slice().sort((a, b) => a.c - b.c)[0]; return `<div class="panel empty small">${oku(m)}で買える高収益物件はありません。いちばん安いのは ${esc(cheap.s)} ${esc(cheap.n)}（${oku(cheap.c)}）です。</div>`; }
@@ -522,7 +605,7 @@ function renderPlan() {
   const tasks = tasksFor(state.ed, y, N, 6, nowCtx());
   const doT = tasks.filter((t) => t.k !== "warn").slice(0, 3), ngT = tasks.filter((t) => t.k === "warn").slice(0, 2);
   // 最優先：やることの1位。寄り道の中に「いま」効く駅があれば添える
-  const top = doT[0] || tasks[0];
+  const top = (state.bonbi && tasks.find((t) => t.t === "貧乏神をなすりつける")) || doT[0] || tasks[0];
   const goStop = plan && (plan.picked.find((c) => c.go) || plan.picked[0]);
   $("focus").innerHTML = top ? `<span class="ic" aria-hidden="true">🚩</span><small>いま${y}年目の最優先</small><b>${esc(top.t)}</b><p>${esc(top.d)}${goStop ? `<br>この区間なら：${esc(goStop.p.n)}（${esc(goStop.tag)}）に寄る` : ""}</p>` : "";
   let h = "";
@@ -530,11 +613,11 @@ function renderPlan() {
   if (ma) h += `<div class="month-alert"><span class="emoji" aria-hidden="true">${ma[0]}</span><span><strong>${ma[1]}</strong><br>${ma[2]}</span></div>`;
   if (state.mapPick) h += `<div class="hint"><span>地図をタップして${state.mapPick === "from" ? "いまいる場所" : "目的地"}を選んでください</span><button type="button" data-mappick="off">やめる</button></div>`;
   if (plan || state.mapPick) {
-    if (plan) h += `<div class="routehead"><b>${esc(plan.A.n)} → ${esc(plan.B.n)}</b><span>マス目で約${plan.masu}マス</span></div><p class="route-warning">※盤面のたて＋よこのマス数（公式の全駅マップの位置から計算）。線路の回り道で、実際はこれより増えることがあります。</p>`;
+    if (plan) h += `<div class="routehead"><b>${esc(plan.A.n)} → ${esc(plan.B.n)}</b><span>${plan.rail ? `線路で最短${plan.masu}マス` : `マス目で約${plan.masu}マス`}</span></div><p class="route-warning">${plan.rail ? `※線路をたどった最短のマス数です${plan.total != null && plan.picked.length ? `（寄る駅を全部回ると${plan.total}マス）` : ""}。線路は公式マップの画像から読み取ったもので、ゲーム内で全区間を確かめてはいません。参考値として使ってください。` : "※この区間は線路で数えられなかったため、盤面のたて＋よこの目安です。"}</p>`;
     h += `<div class="mapbox"><svg id="routesvg" role="img" aria-label="${plan ? `${esc(plan.A.n)}から${esc(plan.B.n)}までの寄り道を示した地図。下の一覧に同じ内容があります。` : "場所を選ぶための地図"}"></svg></div>`;
   }
   if (plan) {
-    const dl = (det) => (det < 1.5 ? "通り道" : `${det < 4.5 ? "少し寄り道" : "寄り道"}（＋約${Math.round(det)}マス）`);
+    const dl = (det) => (det < 0.5 ? "通り道" : `${det < 4.5 ? "少し寄り道" : "寄り道"}（＋${plan.rail ? "" : "約"}${Math.round(det)}マス）`);
     const nbCls = (t) => { const g = TYPES[t].g; return g === "card" ? "" : " " + g; };
     if (plan.picked.length) {
       h += `<h3>寄る駅（この順番で）</h3><ol class="panel rlist">` +
@@ -550,6 +633,14 @@ function renderPlan() {
     h += `<div class="panel empty">${A && B && A.n === B.n ? "いまいる駅と目的地が同じです。次の目的地を入れてください。" : "目的地を入れると、通り道で寄る駅を順番に出します。"}</div>`;
   }
   const st = signTitle(), evs = yearEvents(state.ed, y);
+  const r6 = reach(6), r18 = reach(18);
+  if (r18) {
+    const row = (x) => `<li><span class="tag ${TYPES[x.p.t].g === "hero" ? "hero" : TYPES[x.p.t].g === "event" ? "prop" : "card"}">${x.d}マス</span><b>${esc(x.p.n)}</b><span class="d">${TYPES[x.p.t].n}・${esc(x.sv.tag)}</span></li>`;
+    const far = r18.filter((x) => x.d > 6);
+    h += `<h3>サイコロで届く駅</h3><div class="panel nowcard split"><h4>サイコロ1個（6マス以内）</h4>${r6.length ? `<ul class="todo" style="margin:0 -14px">${r6.map(row).join("")}</ul>` : `<p class="sub">6マス以内に、寄る価値の高い駅はありません。</p>`}` +
+      `<h4>特急（サイコロ3個・18マス以内）</h4>${far.length ? `<ul class="todo" style="margin:0 -14px">${far.map(row).join("")}</ul>` : `<p class="sub">7〜18マスに、寄る価値の高い駅はありません。</p>`}` +
+      `<p class="note">${esc(getPlace("from").n)}からの最短マス数です。止まるには、ちょうどその数の目が必要です。</p></div>`;
+  }
   h += `<h3>${oku(state.money ?? 0) === "0" && state.money == null ? "所持金で買えるもの" : `所持金${oku(state.money)}で買えるもの`}</h3>${buyList()}`;
   h += `<h3>いま${y}年目${state.month ? state.month + "月" : ""}にやること</h3><div class="panel nowcard split"><p class="sub"><b>${st.title}</b>（残り${N - y}年）</p>` +
     (evs.length ? `<ul class="flags">${evs.map((e) => `<li class="flag ${e.k}"><i aria-hidden="true">${GLYPH[e.k]}</i><span>${esc(e.t)}</span></li>`).join("")}</ul>` : "") +
@@ -576,6 +667,7 @@ function setN(n) {
 }
 function setPlace(which, p) {
   state[which] = p ? p.n : null;
+  if (which === "to" && p) pushHist(p.n);
   store.set(which + "." + state.ed, state[which]);
   state.mapPick = null;
   $("sugg-" + which).hidden = true;
@@ -626,6 +718,10 @@ function saveCards() { store.set("cards", state.cards ? JSON.stringify(state.car
   else if (id === "card-q") { state.cardq = q; renderCards(); }
   else { state.mapq = kata2hira(q); const all = places(), exact = all.find((p) => p.n === state.mapq), hits = state.mapq ? all.filter(matchFilter) : []; state.sel = exact ? exact.n : hits.length === 1 ? hits[0].n : null; renderMap(); renderDetail(); renderGroups(); }
 }));
+$("in-bonbi").addEventListener("change", (e) => { state.bonbi = e.target.checked; store.set("bonbi", state.bonbi ? "1" : null); renderPlan(); renderSign(); });
+$("in-opp-card").addEventListener("change", (e) => { state.opp.card = e.target.checked; store.set("opp.card", e.target.checked ? "1" : null); renderPlan(); renderSign(); });
+$("in-opp-prop").addEventListener("change", (e) => { state.opp.prop = e.target.checked; store.set("opp.prop", e.target.checked ? "1" : null); renderPlan(); renderSign(); });
+$("in-opp-memo").addEventListener("input", (e) => { state.opp.memo = e.target.value.slice(0, 60); store.set("opp.memo", state.opp.memo || null); });
 $("cardreg-q").addEventListener("input", (e) => { state.cardRegQ = e.target.value.trim().slice(0, 20); renderSetup(); });
 $("todo").addEventListener("change", (e) => { const c = e.target.closest("[data-check]"); if (!c) return; setCheck(state.year, c.dataset.check, c.checked); c.closest("li").classList.toggle("done", c.checked); });
 
@@ -645,7 +741,7 @@ function renderHeroes() {
     return `<div class="panel hgroup${now ? " now" : ""}"><header>${nm}${now ? `<span class="now-pill">いま${state.year}年目</span>` : ""}</header>${hs.map((x) => {
       const twin = o.heroes.find((z) => z.n === x.n);
       const late = x.fromY && state.N < x.fromY ? `<span class="pill">${state.N}年プレイでは効果が出ない</span>` : "";
-      return `<div class="hrow"><span class="rk ${x.r}">${x.r}</span><b>${esc(x.n)}${money != null && x.c != null && x.c <= money ? `<span class="buy">独占額に届く</span>` : ""}</b><span class="cost">${x.c == null ? "物件1つ" : oku(x.c)}</span><span class="where">${esc(x.s)}（${esc(x.p)}）を独占 ${late}</span><p>${esc(x.e)}</p>${twin ? `<span class="other">東西：${o.label}では${esc(twin.s)}（${twin.c == null ? "物件1つ" : oku(twin.c)}）。効果の細部は東西で違うことがある</span>` : ""}</div>`;
+      return `<div class="hrow"><span class="rk ${x.r}">${x.r}</span><b>${esc(x.n)}${money != null && x.c != null && x.c <= money ? `<span class="buy">独占額に届く</span>` : ""}</b><span class="cost">${x.c == null ? "物件1つ" : oku(x.c)}</span><span class="where">${esc(x.s)}（${esc(x.p)}）を独占 ${late}</span><p>${esc(x.e)}</p>${twin ? `<span class="other">東西：${o.label}では${esc(twin.s)}（${twin.c == null ? "物件1つ" : oku(twin.c)}）。効果の細部は東西で違うことがある</span>` : ""}<button type="button" class="ownbtn" data-ownh="${esc(x.n)}" aria-pressed="${ownsHero(x.n)}">${ownsHero(x.n) ? "✓ 仲間にした" : "仲間にしたら押す"}</button></div>`;
     }).join("")}</div>`;
   }).join("");
   $("herolist").innerHTML = html || `<div class="panel empty small">条件に合うヒーローがいません。</div>`;
@@ -662,9 +758,10 @@ function renderProps() {
   const max = Math.max(1, ...rows.map((r) => r.inc));
   $("bars").innerHTML = rows.length ? rows.map((r) => {
     const pay = 100 / r.r, can = money != null && r.c <= money;
-    return `<div class="brow"><b>${esc(r.s)} ${esc(r.n)}</b><span class="v">年${oku(r.inc)}</span><div class="track"><div class="fill" style="width:${((r.inc / max) * 100).toFixed(1)}%"></div></div><span class="m">価格${oku(r.c)}・収益率${r.r}%</span><span class="why"><span class="pill${pay <= 0.5 ? " go" : ""}">元が取れるまで約${pay < 1 ? pay.toFixed(2).replace(/0$/, "") : pay}年</span>${can ? `<span class="pill go">いま買える</span>` : money != null ? `<span class="pill">あと${oku(Math.round((r.c - money) * 100) / 100)}</span>` : ""}</span></div>`;
+    return `<div class="brow"><b>${esc(r.s)} ${esc(r.n)}</b><span class="v">年${oku(r.inc)}</span><div class="track"><div class="fill" style="width:${((r.inc / max) * 100).toFixed(1)}%"></div></div><span class="m">価格${oku(r.c)}・収益率${r.r}%</span><span class="why"><span class="pill${pay <= 0.5 ? " go" : ""}">元が取れるまで約${pay < 1 ? pay.toFixed(2).replace(/0$/, "") : pay}年</span>${can ? `<span class="pill go">いま買える</span>` : money != null ? `<span class="pill">あと${oku(Math.round((r.c - money) * 100) / 100)}</span>` : ""}</span><button type="button" class="ownbtn" data-ownp="${esc(propKey(r))}" aria-pressed="${ownsProp(r)}">${ownsProp(r) ? "✓ 買った" : "買ったら押す"}</button></div>`;
   }).join("") : `<p class="sub">条件に合う物件がありません。</p>`;
-  $("propnote").textContent = d.propNote;
+  const mine = d.props.filter(ownsProp), inc = mine.reduce((n, p) => n + (p.c * p.r) / 100, 0);
+  $("propnote").textContent = (mine.length ? `買った物件：${mine.length}件、決算の収益は年${oku(Math.round(inc * 10000) / 10000)}（この一覧にある物件だけの合計。収益率2倍などの効果は入っていません）。` : "") + d.propNote;
   $("spec").innerHTML = d.propSpecial.map((s) => `<li><b>${esc(s.t)}</b><span>${esc(s.d)}</span></li>`).join("");
 }
 function cardAdvice() {
@@ -690,8 +787,8 @@ function renderCards() {
   const list = CARD_INFO.filter((c) => (c.id !== "m229" || state.ed === "east") && hit(q, c.n, c.e, c.get));
   list.sort((a, b) => hasCard(b.id) - hasCard(a.id));   // 手持ちを上に
   /* 効果を収録していないカードを持っているときは、名前と枚数だけ出す */
-  const others = (state.cards || []).map((id) => CARD_BY[id]).filter((c) => c && !c.info && hit(q, c.n));
-  const otherHtml = others.map((c) => `<li><b>${esc(c.n)}<span class="own">手持ち ${state.cardN[c.id] || 1}枚</span><span class="conf un">効果は未収録</span></b><span>${esc(c.g)}のカード。公式の一覧にあるのは名前だけで、効果はまだ確認できていません。</span></li>`).join("");
+  const others = CARDS.filter((c) => !c.info && (q ? hit(kata2hira(q), kata2hira(c.n), c.fx) : hasCard(c.id))).sort((a, b) => hasCard(b.id) - hasCard(a.id));
+  const otherHtml = others.map((c) => `<li><b>${esc(c.n)}${hasCard(c.id) ? `<span class="own">手持ち ${state.cardN[c.id] || 1}枚</span>` : ""}<span class="conf ${c.fx ? "est" : "un"}">${c.fx ? "推定" : "効果は未収録"}</span></b><span>${c.fx ? esc(c.fx) : "効果はまだ確認できていません。"}</span><span>${esc(c.g)}のカード</span></li>`).join("");
   $("cardinfo").innerHTML = otherHtml + (list.length ? list.map((c) => `<li><b>${esc(c.n)}${hasCard(c.id) ? `<span class="own">手持ち ${state.cardN[c.id] || 1}枚</span>` : ""}<span class="conf ${c.st === "ok" ? "ok" : c.st === "est" ? "est" : "un"}">${CONF[c.st]}</span></b><span>${esc(c.e)}</span><span>使いどころ：${esc(c.use)}（目安）</span><span>入手：${esc(c.get)}</span></li>`).join("") : otherHtml ? "" : `<li><span>条件に合うカードがありません。</span></li>`);
   $("steps").innerHTML = d.loop.map((s) => `<li><span>${esc(s)}</span></li>`).join("");
   $("free").innerHTML = d.free.map((f) => `<li><b>${esc(f.s)}<small>${esc(f.p)}</small></b><span>${esc(f.m ? f.m[state.playMode === "multi" ? 1 : 0] : f.c)}</span></li>`).join("");
@@ -732,11 +829,11 @@ function toast(msg) {
 async function copyRoute() {
   const plan = computePlan(); if (!plan) return;
   const lines = [`【桃鉄2 攻略プランナー（非公式）】${ED[state.ed].label} ${state.year}/${state.N}年目${state.month ? "・" + state.month + "月" : ""}`,
-    `いまいる駅：${plan.A.n} → 目的地：${plan.B.n}（マス目で約${plan.masu}マス）`,
+    `いまいる駅：${plan.A.n} → 目的地：${plan.B.n}（${plan.rail ? "線路で最短" : "マス目で約"}${plan.masu}マス）`,
     `寄る駅：${plan.picked.length ? plan.picked.map((c, i) => `${i + 1}.${c.p.n}（${c.tag}）`).join(" → ") : "なし（まっすぐ目的地へ）"}`,
     plan.avoid.length ? `止まらない：${plan.avoid.map((p) => p.n).join("・")}` : "",
     `いまやること：${tasksFor(state.ed, state.year, state.N, 3, nowCtx()).map((x) => x.t).join("／")}`,
-    "※距離は盤面のマス目（たて＋よこ）の目安です。線路のつながりは入っていないので、経路はゲーム画面で確認してください。"].filter(Boolean);
+    "※マス数は公式マップの画像から読み取った線路で数えた参考値です。経路はゲーム画面で確認してください。"].filter(Boolean);
   const txt = lines.join("\n");
   try {
     if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(txt);
@@ -779,7 +876,7 @@ function resetAll() {
 }
 /* 新しいゲーム：年・月・駅・所持金・カード・チェックを消す。東西・年数・人数・作戦の設定は残す */
 function newGame() {
-  try { Object.keys(localStorage).filter((k) => /^mt2p\.(year|month|money|cards|cardn|other|started|from\.|to\.|custom\.|chk\.)/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch (e) {}
+  try { Object.keys(localStorage).filter((k) => /^mt2p\.(year|month|money|cards|cardn|other|started|bonbi|opp\.|own\.|hist\.|from\.|to\.|custom\.|chk\.)/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch (e) {}
   restore(); state.mapPick = null; $("gamesetup").open = true; renderAll(); window.scrollTo(0, 0); toast("新しいゲームの準備ができました");
 }
 /* 月を1つ進める。3月の次は、年が1つ進んで4月 */
@@ -841,6 +938,8 @@ document.addEventListener("click", (e) => {
     state.money = v; store.set("money", v == null ? null : String(v)); $("in-money").value = v == null ? "" : v; renderPlan(); renderHeroes(); renderProps();
   }
   else if (ds.cardf) { state.cardF = ds.cardf; state.cardRegQ = ""; $("cardreg-q").value = ""; renderSetup(); }
+  else if (ds.ownh) { state.own.h = ownsHero(ds.ownh) ? state.own.h.filter((x) => x !== ds.ownh) : state.own.h.concat([ds.ownh]); saveOwn(); renderHeroes(); renderPlan(); }
+  else if (ds.ownp) { state.own.p = state.own.p.includes(ds.ownp) ? state.own.p.filter((x) => x !== ds.ownp) : state.own.p.concat([ds.ownp]); saveOwn(); renderProps(); renderPlan(); }
   else if (ds.nextmonth) nextMonth();
   else if (ds.startgame) { store.set("started", "1"); $("gamesetup").open = false; renderSetup(); toast(`${ED[state.ed].label}・${state.N}年で始めます`); }
   else if (ds.newgame) { if (armed(b, "もう一度押すと、入力を消して最初から")) newGame(); }
