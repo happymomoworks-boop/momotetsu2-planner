@@ -4,20 +4,20 @@
 const CHECKED = "2026-11-12";
 const CONF = { ok: "確認済み", est: "推定", un: "未確認" };
 
-/* 主なカード。効果と入手は出典の要約。own: 手持ち登録のキー（plan の「いま持っているカード」と共通） */
+/* 主なカード。効果と入手は出典の要約。use＝使いどころ（効果から考えたこのアプリの目安で、出典の文言ではない）。own: 手持ち登録のキー（plan の「いま持っているカード」と共通） */
 const CARD_INFO = [
-  { id: "tokkyu", n: "特急周遊", e: "サイコロ3個で進む。5〜7回使える", get: "東：恐山・大原・北濃・寸又峡など多数／西：西大寺・七類・福崎・智頭など", tour: true, st: "ok", u: "https://gamepedia.jp/momotetsu2/card/799" },
-  { id: "shinkan", n: "新幹線周遊", e: "サイコロ5個で進む。5〜7回使える", get: "東：福生・新札幌・真駒内・鷺宮／西：中百舌鳥・王寺・虎姫・大和八木・橋杭岩など", tour: true, st: "ok", u: "https://gamepedia.jp/momotetsu2/card/800" },
-  { id: "linear", n: "リニア周遊", e: "サイコロ10個で進む。9〜15回使える", get: "1〜49年目は売り場なし。ナイスカード駅などで出る。西の宮本武蔵駅（最初の1人・1人プレイ）", tour: true, st: "ok", u: "https://gamepedia.jp/momotetsu2/card/803" },
-  { id: "katana", n: "刀狩り", e: "指定した社長のカードを1枚奪う（低確率で2枚）", get: "東：福生・袋田／西：福崎・中百舌鳥など。刀狩り駅（三方・大江）でも同じ効果", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/870" },
-  { id: "hoshi", n: "☆飛び", e: "その月のカード売り場4か所から選んで移動", get: "東：恐山・大原・北濃・寸又峡／西：西大寺・御厨・赤嶺・七類・光・山鹿", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/830" },
-  { id: "bukken", n: "物件飛び", e: "所持金で独占できる物件駅5つから選んで移動", get: "東：女満別・恐山・福生・千歳など／西：西大寺・中百舌鳥・智頭など", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/804" },
-  { id: "goudatsu", n: "強奪飛び", e: "他の社長の物件駅へ移動し、物件を1つ奪う", get: "東：女満別・福生など／西：福崎・西大寺・中百舌鳥など", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/835" },
-  { id: "teleport", n: "テレポート", e: "指定した社長の1〜3マス以内へ移動", get: "東：千歳／西：智頭・大田・若松", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/859" },
-  { id: "tokusei", n: "徳政令", e: "所持金がマイナスの全員を0円にする。使ったあと続けて行動できる", get: "東：五稜郭・宗谷・二本松・千歳など／西：宇治山田・熊野本宮・七類・智頭など。価格0円は推定", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/881" },
-  { id: "dubbing", n: "ダビング", e: "手持ちのカードを1枚複製。周遊カードは回数が初期化", get: "西：福崎・法隆寺・若桜・井原・吹上浜・宜野湾。斑鳩は15年目3月まで（出典で1年ずれあり）", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/885" },
-  { id: "russell", n: "ラッセル車", e: "豪雪中でも12か月、サイコロの出目が1〜6に戻る", get: "東：苗穂・新青森。最初の豪雪のとき全員に1枚配られる", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/905" },
-  { id: "m229", n: "229マス", e: "合計229マス進むまで、進むカードを選んで使える", get: "東：田子の畑5つを買い、16年目以降に田子に止まると低確率で出る", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/902" },
+  { id: "tokkyu", use: "毎月の移動に。回数が減ったら周遊駅で回復する", n: "特急周遊", e: "サイコロ3個で進む。5〜7回使える", get: "東：恐山・大原・北濃・寸又峡など多数／西：西大寺・七類・福崎・智頭など", tour: true, st: "ok", u: "https://gamepedia.jp/momotetsu2/card/799" },
+  { id: "shinkan", use: "遠い目的地へ急ぐときに。回数が減ったら周遊駅で回復する", n: "新幹線周遊", e: "サイコロ5個で進む。5〜7回使える", get: "東：福生・新札幌・真駒内・鷺宮／西：中百舌鳥・王寺・虎姫・大和八木・橋杭岩など", tour: true, st: "ok", u: "https://gamepedia.jp/momotetsu2/card/800" },
+  { id: "linear", use: "いちばん遠い目的地のときに。回数が残り少なくなる前に、周遊駅かダビングで戻す", n: "リニア周遊", e: "サイコロ10個で進む。9〜15回使える", get: "1〜49年目は売り場なし。ナイスカード駅などで出る。西の宮本武蔵駅（最初の1人・1人プレイ）", tour: true, st: "ok", u: "https://gamepedia.jp/momotetsu2/card/803" },
+  { id: "katana", use: "相手が周遊カードなど強いカードを持っているときに", n: "刀狩り", e: "指定した社長のカードを1枚奪う（低確率で2枚）", get: "東：福生・袋田／西：福崎・中百舌鳥など。刀狩り駅（三方・大江）でも同じ効果", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/870" },
+  { id: "hoshi", use: "カードが減ってきたときに（売り場へ飛んで補充）", n: "☆飛び", e: "その月のカード売り場4か所から選んで移動", get: "東：恐山・大原・北濃・寸又峡／西：西大寺・御厨・赤嶺・七類・光・山鹿", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/830" },
+  { id: "bukken", use: "所持金が独占額に届いたときに（独占できる物件駅へ飛ぶ）", n: "物件飛び", e: "所持金で独占できる物件駅5つから選んで移動", get: "東：女満別・恐山・福生・千歳など／西：西大寺・中百舌鳥・智頭など", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/804" },
+  { id: "goudatsu", use: "相手が高い物件を持っているときに", n: "強奪飛び", e: "他の社長の物件駅へ移動し、物件を1つ奪う", get: "東：女満別・福生など／西：福崎・西大寺・中百舌鳥など", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/835" },
+  { id: "teleport", use: "目的地の近くにいる相手のそばへ行きたいときに", n: "テレポート", e: "指定した社長の1〜3マス以内へ移動", get: "東：千歳／西：智頭・大田・若松", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/859" },
+  { id: "tokusei", use: "所持金がマイナスになったときに", n: "徳政令", e: "所持金がマイナスの全員を0円にする。使ったあと続けて行動できる", get: "東：五稜郭・宗谷・二本松・千歳など／西：宇治山田・熊野本宮・七類・智頭など。価格0円は推定", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/881" },
+  { id: "dubbing", use: "周遊カードを持っているときに（複製すると回数も初期化される）", n: "ダビング", e: "手持ちのカードを1枚複製。周遊カードは回数が初期化", get: "西：福崎・法隆寺・若桜・井原・吹上浜・宜野湾。斑鳩は15年目3月まで（出典で1年ずれあり）", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/885" },
+  { id: "russell", use: "豪雪（11月ごろ）で出目が1〜2になったときに", n: "ラッセル車", e: "豪雪中でも12か月、サイコロの出目が1〜6に戻る", get: "東：苗穂・新青森。最初の豪雪のとき全員に1枚配られる", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/905" },
+  { id: "m229", use: "遠い目的地が続くときに（進むカードを選んで使える）", n: "229マス", e: "合計229マス進むまで、進むカードを選んで使える", get: "東：田子の畑5つを買い、16年目以降に田子に止まると低確率で出る", st: "ok", u: "https://gamepedia.jp/momotetsu2/card/902" },
 ];
 
 /* 照合の記録（重要な項目と、直したもの・確認できなかったもの） */

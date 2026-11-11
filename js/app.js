@@ -7,7 +7,7 @@ const store = {
 };
 const VIEWS = ["plan", "year", "map", "heroes", "props", "cards"];
 /* month: 1〜12 か null（未設定）。cards: 登録したカードのid配列か null（未登録＝手持ちを考えない）。other: 登録外のカードの枚数 */
-const state = { ed: "east", N: 17, year: 1, region: "all", filter: "all", sel: null, view: "plan", from: null, to: null, money: null, mapPick: null,
+const state = { cardN: {}, ed: "east", N: 17, year: 1, region: "all", filter: "all", sel: null, view: "plan", from: null, to: null, money: null, mapPick: null,
   month: null, playMode: "solo", goal: "balance", cards: null, other: 0, mapq: "", heroq: "", heroF: "all", propq: "", propF: "all", cardq: "" };
 const GOALS = { balance: "バランス", asset: "物件・ヒーロー重視", card: "カード重視" };
 const MAXCARDS = 20;
@@ -53,16 +53,18 @@ function restore() {
   const n = parseInt(store.get("N", "17"), 10); state.N = n >= 1 && n <= 100 ? n : 17;
   const y = parseInt(store.get("year", "1"), 10); state.year = y >= 1 && y <= state.N ? y : 1;
   const m = parseFloat(store.get("money", "")); state.money = m >= 0 && m < 1e5 ? m : null;
-  const mo = parseInt(store.get("month", ""), 10); state.month = mo >= 1 && mo <= 12 ? mo : null;
+  const ms = store.get("month", null), mo = parseInt(ms, 10); state.month = mo >= 1 && mo <= 12 ? mo : ms === null ? 4 : null;  // 初めては4月。「わからない」を選んだら null
   state.playMode = store.get("playMode", "solo") === "multi" ? "multi" : "solo";
   const g = store.get("goal", "balance"); state.goal = GOALS[g] ? g : "balance";
   state.cards = null;
   try { const c = JSON.parse(store.get("cards", "null")); if (Array.isArray(c)) state.cards = c.filter((id) => CARD_INFO.some((x) => x.id === id)); } catch (e) {}
+  state.cardN = {};
+  try { const n = JSON.parse(store.get("cardn", "{}")) || {}; (state.cards || []).forEach((id) => { const v = parseInt(n[id], 10); state.cardN[id] = v >= 1 && v <= 9 ? v : 1; }); } catch (e) { (state.cards || []).forEach((id) => { state.cardN[id] = 1; }); }
   const o = parseInt(store.get("other", "0"), 10); state.other = o >= 0 && o <= MAXCARDS ? o : 0;
   loadEd();
 }
 restore();
-const cardCount = () => (state.cards ? state.cards.length + state.other : null);
+const cardCount = () => (state.cards ? state.cards.reduce((n, id) => n + (state.cardN[id] || 1), 0) + state.other : null);
 const hasCard = (id) => !!state.cards && state.cards.includes(id);
 const hasTour = () => !!state.cards && CARD_INFO.some((c) => c.tour && state.cards.includes(c.id));
 
@@ -107,9 +109,10 @@ function tasksFor(ed, y, N, max, ctx) {
     return t.cost <= money * 2 ? { pr: pr - 10, d: `${d}（あと${gap}）` } : { pr: pr - 40, d: `${d}（まず${oku(t.cost)}まで貯める）` };
   };
   const list = TASKS[ed].concat(CLOSING).filter(ok).concat(c.month ? monthTasks(ed, c.month, y, N) : []);
+  if (c.cards != null && c.cards <= 1) list.push({ k: "card", pr: 89, t: "カードを補充する", d: `手持ちが${c.cards}枚。目的地へ急ぐより先に、黄色のカード駅かカード売り場に止まる（切れる前に補充するのが基本）` });
   return list.map((t) => ({ k: t.k, t: t.t, ...fit(t) })).sort((a, b) => b.pr - a.pr).slice(0, max || 6).map(({ k, t, d }) => ({ k, t, d }));
 }
-const nowCtx = () => ({ money: state.money, month: state.month, goal: state.goal });
+const nowCtx = () => ({ money: state.money, month: state.month, goal: state.goal, cards: cardCount() });
 /* 年別のチェックリスト（終えたやること）。キーは chk.<ed>.<年> */
 function checks(y) { try { const a = JSON.parse(store.get(`chk.${state.ed}.${y}`, "[]")); return Array.isArray(a) ? a.filter((x) => typeof x === "string") : []; } catch (e) { return []; } }
 function setCheck(y, title, on) {
@@ -347,7 +350,7 @@ function stopValue(p) {
       const base = { SS: 92, S: 76, A: 56, B: 34, "推": 50 }[h.r] || 40;
       let f, tag, go = false;
       if (h.c == null) { f = 1; tag = "物件1つで仲間に"; go = true; }
-      else if (money != null) { const a = afford(h.c); f = a; tag = a === 1 ? "いま独占できる" : aTag(h.c, a); go = a === 1; }
+      else if (money != null) { const a = afford(h.c); f = a; tag = a === 1 ? "独占額に届く" : aTag(h.c, a); go = a === 1; }
       else { f = h.ph <= pi ? 1 : 0.3; tag = h.ph <= pi ? "狙い目" : "まだ先"; go = h.ph <= pi; }
       if (left < 1) f *= 0.4;
       if (h.c != null && h.c >= 100 && left < 3) { f *= 0.4; tag = "残り年数が少ない"; go = false; }
@@ -473,7 +476,7 @@ const MONTH_ALERT = {
 MONTH_ALERT[1] = MONTH_ALERT[2] = MONTH_ALERT[12];
 function renderSetup() {
   const d = ED[state.ed], y = state.year, N = state.N;
-  $("plan-ed").textContent = `${d.label}・${y}年目／全${N}年`;
+  $("plan-ed").textContent = `${d.label}・${y}年目${state.month ? state.month + "月" : ""}／全${N}年`;
   if (document.activeElement !== $("in-n")) $("in-n").value = N;
   if (document.activeElement !== $("in-from")) $("in-from").value = state.from || "";
   if (document.activeElement !== $("in-to")) $("in-to").value = state.to || "";
@@ -481,16 +484,29 @@ function renderSetup() {
   $("in-month").value = state.month == null ? "" : String(state.month);
   $("in-playmode").value = state.playMode;
   $("in-goal").value = state.goal;
+  $("now-y").textContent = `${y}年目`;
+  $("game-sum").textContent = `${d.label}・${N}年・${state.playMode === "multi" ? "複数人" : "ひとり"}`;
   $("presets").innerHTML = [3, 5, 10, 17, 20, 30, 50, 100].map((n) => `<button type="button" class="chip" data-nset="${n}" aria-pressed="${n === N}">${n}年</button>`).join("");
   document.querySelectorAll("[data-mappick]").forEach((b) => b.setAttribute("aria-pressed", String(state.mapPick === b.dataset.mappick)));
-  $("cardreg").innerHTML = CARD_INFO.filter((c) => c.id !== "m229" || state.ed === "east").map((c) => `<button type="button" class="card-toggle" data-card="${c.id}" aria-pressed="${hasCard(c.id)}">${c.n}</button>`).join("");
+  $("cardreg").innerHTML = CARD_INFO.filter((c) => c.id !== "m229" || state.ed === "east").map((c) => { const n = hasCard(c.id) ? state.cardN[c.id] || 1 : 0; return `<div class="crow"><button type="button" class="card-toggle" data-card="${c.id}" aria-pressed="${n > 0}">${c.n}</button><button type="button" class="cstep" data-cardd="${c.id}" data-d="-1" aria-label="${c.n}を1枚減らす"${n ? "" : " disabled"}>−</button><b class="num">${n}</b><button type="button" class="cstep" data-cardd="${c.id}" data-d="1" aria-label="${c.n}を1枚増やす">＋</button></div>`; }).join("");
   $("other-n").textContent = state.other;
   const cc = cardCount();
   $("cardreg-note").textContent = cc == null
-    ? "まだ登録していません。登録すると、ダビング駅・周遊駅・売り場のおすすめ度と、夕張・門司港（カードの枚数で起きるイベント）の判定が変わります。"
-    : `いま${cc}枚で登録中。` + (hasTour() ? "周遊カードあり：周遊駅とダビング駅を優先します。" : "周遊カードなし：周遊カードを買える売り場を優先します。");
-  const sum = [state.month ? `${state.month}月` : "月：未設定", state.playMode === "multi" ? "複数人" : "ひとり", GOALS[state.goal], cc == null ? "カード：未登録" : `カード${cc}枚`];
-  $("more-sum").textContent = sum.join("・");
+    ? "まだ登録していません。登録すると、ダビング駅・周遊駅・売り場のおすすめと、夕張・門司港（カードの枚数で起きるイベント）の判定、カードの使いどころが変わります。"
+    : `いま合計${cc}枚。` + (hasTour() ? "周遊カードあり：周遊駅とダビング駅を優先します。" : "周遊カードなし：周遊カードを買える売り場を優先します。");
+  $("more-sum").textContent = [cc == null ? "カード：未登録" : `カード${cc}枚`, GOALS[state.goal]].join("・");
+}
+/* 所持金で買える物件・独占額に届く駅（持ち主がだれかは分からないので「未購入なら」の前提） */
+function buyList() {
+  const d = ED[state.ed], m = state.money;
+  if (m == null) return `<div class="panel empty small">所持金を入れると、買える物件と、独占額に届く駅がここに出ます。</div>`;
+  const props = d.props.map((p) => ({ ...p, inc: (p.c * p.r) / 100 })).filter((p) => p.c <= m).sort((a, b) => b.inc - a.inc || a.c - b.c).slice(0, 3);
+  const rk = { SS: 0, S: 1, A: 2, "推": 3, B: 4 };
+  const heroes = d.heroes.filter((x) => x.c != null && x.c <= m && !(x.fromY && state.N < x.fromY)).sort((a, b) => (rk[a.r] ?? 5) - (rk[b.r] ?? 5) || b.c - a.c).slice(0, 2);
+  const li = (k, t, dd) => `<li><span class="tag ${k}">${KIND[k]}</span><b>${esc(t)}</b><span class="d">${esc(dd)}</span></li>`;
+  const rows = props.map((p) => li("prop", `${p.s} ${p.n}`, `${oku(p.c)}・収益率${p.r}%・年${oku(p.inc)}`)).concat(heroes.map((x) => li("hero", `${x.s}を独占 → ${x.n}`, `独占額 ${oku(x.c)}。${x.e}`)));
+  if (!rows.length) { const cheap = d.props.slice().sort((a, b) => a.c - b.c)[0]; return `<div class="panel empty small">${oku(m)}で買える高収益物件はありません。いちばん安いのは ${esc(cheap.s)} ${esc(cheap.n)}（${oku(cheap.c)}）です。</div>`; }
+  return `<ul class="panel todo">${rows.join("")}</ul><p class="note">高収益物件の一覧と、独占額が所持金以内のヒーロー駅から選んでいます。ほかの社長がすでに買っている物件は買えません（持ち主はこのアプリでは分かりません）。</p>`;
 }
 function taskLi(t) { return `<li><span class="tag ${t.k}">${KIND[t.k]}</span><b>${esc(t.t)}</b><span class="d">${esc(t.d)}</span></li>`; }
 function renderPlan() {
@@ -528,7 +544,8 @@ function renderPlan() {
     h += `<div class="panel empty">${A && B && A.n === B.n ? "いまいる駅と目的地が同じです。次の目的地を入れてください。" : "目的地を入れると、通り道で寄る駅を順番に出します。"}</div>`;
   }
   const st = signTitle(), evs = yearEvents(state.ed, y);
-  h += `<h3>いま${y}年目にやること</h3><div class="panel nowcard split"><p class="sub"><b>${st.title}</b>（残り${N - y}年）</p>` +
+  h += `<h3>${oku(state.money ?? 0) === "0" && state.money == null ? "所持金で買えるもの" : `所持金${oku(state.money)}で買えるもの`}</h3>${buyList()}`;
+  h += `<h3>いま${y}年目${state.month ? state.month + "月" : ""}にやること</h3><div class="panel nowcard split"><p class="sub"><b>${st.title}</b>（残り${N - y}年）</p>` +
     (evs.length ? `<ul class="flags">${evs.map((e) => `<li class="flag ${e.k}"><i aria-hidden="true">${GLYPH[e.k]}</i><span>${esc(e.t)}</span></li>`).join("")}</ul>` : "") +
     `<h4>やること</h4><ul class="todo" style="margin:0 -14px">${doT.map(taskLi).join("")}</ul>` +
     (ngT.length ? `<h4 class="ng">避けること</h4><ul class="todo" style="margin:0 -14px">${ngT.map(taskLi).join("")}</ul>` : "") +
@@ -591,11 +608,11 @@ $("in-money").addEventListener("input", (e) => {
 });
 $("in-month").addEventListener("change", (e) => {
   const mo = parseInt(e.target.value, 10); state.month = mo >= 1 && mo <= 12 ? mo : null;
-  store.set("month", state.month == null ? null : String(state.month)); renderPlan(); renderSign(); renderCal(); renderCards();
+  store.set("month", state.month == null ? "none" : String(state.month)); renderPlan(); renderSign(); renderCal(); renderCards();
 });
 $("in-playmode").addEventListener("change", (e) => { state.playMode = e.target.value === "multi" ? "multi" : "solo"; store.set("playMode", state.playMode); renderPlan(); renderCards(); });
 $("in-goal").addEventListener("change", (e) => { state.goal = GOALS[e.target.value] ? e.target.value : "balance"; store.set("goal", state.goal); renderPlan(); renderSign(); });
-function saveCards() { store.set("cards", state.cards ? JSON.stringify(state.cards) : null); store.set("other", String(state.other)); renderPlan(); renderCards(); }
+function saveCards() { store.set("cards", state.cards ? JSON.stringify(state.cards) : null); store.set("cardn", state.cards ? JSON.stringify(state.cardN) : null); store.set("other", String(state.other)); renderPlan(); renderCards(); }
 ["hero-q", "prop-q", "card-q", "map-q"].forEach((id) => $(id).addEventListener("input", (e) => {
   const q = e.target.value.trim().slice(0, 20);
   if (id === "hero-q") { state.heroq = q; renderHeroes(); }
@@ -609,7 +626,7 @@ $("todo").addEventListener("change", (e) => { const c = e.target.closest("[data-
 const hit = (q, ...xs) => !q || xs.some((x) => String(x ?? "").includes(q));
 function renderHeroes() {
   const d = ED[state.ed], o = ED[state.ed === "east" ? "west" : "east"], pi = phaseIndex(state.year), money = state.money, q = state.heroq, F = state.heroF;
-  const fl = [["all", "すべて"], ["now", "いまの時期"], ["top", "SS・S"]].concat(money != null ? [["buy", "いま独占できる"]] : []);
+  const fl = [["all", "すべて"], ["now", "いまの時期"], ["top", "SS・S"]].concat(money != null ? [["buy", "独占額に届く"]] : []);
   if (money == null && F === "buy") state.heroF = "all";
   $("hero-filter").innerHTML = fl.map(([k, n]) => `<button type="button" class="chip" data-heroF="${k}" aria-pressed="${state.heroF === k}">${n}</button>`).join("");
   const names = ["序盤（1〜3年目）に狙う", "中盤前半（4〜7年目）に狙う", "中盤後半（8年目〜）に狙う"];
@@ -621,7 +638,7 @@ function renderHeroes() {
     return `<div class="panel hgroup${now ? " now" : ""}"><header>${nm}${now ? `<span class="now-pill">いま${state.year}年目</span>` : ""}</header>${hs.map((x) => {
       const twin = o.heroes.find((z) => z.n === x.n);
       const late = x.fromY && state.N < x.fromY ? `<span class="pill">${state.N}年プレイでは効果が出ない</span>` : "";
-      return `<div class="hrow"><span class="rk ${x.r}">${x.r}</span><b>${esc(x.n)}${money != null && x.c != null && x.c <= money ? `<span class="buy">いま独占できる</span>` : ""}</b><span class="cost">${x.c == null ? "物件1つ" : oku(x.c)}</span><span class="where">${esc(x.s)}（${esc(x.p)}）を独占 ${late}</span><p>${esc(x.e)}</p>${twin ? `<span class="other">東西：${o.label}では${esc(twin.s)}（${twin.c == null ? "物件1つ" : oku(twin.c)}）。効果の細部は東西で違うことがある</span>` : ""}</div>`;
+      return `<div class="hrow"><span class="rk ${x.r}">${x.r}</span><b>${esc(x.n)}${money != null && x.c != null && x.c <= money ? `<span class="buy">独占額に届く</span>` : ""}</b><span class="cost">${x.c == null ? "物件1つ" : oku(x.c)}</span><span class="where">${esc(x.s)}（${esc(x.p)}）を独占 ${late}</span><p>${esc(x.e)}</p>${twin ? `<span class="other">東西：${o.label}では${esc(twin.s)}（${twin.c == null ? "物件1つ" : oku(twin.c)}）。効果の細部は東西で違うことがある</span>` : ""}</div>`;
     }).join("")}</div>`;
   }).join("");
   $("herolist").innerHTML = html || `<div class="panel empty small">条件に合うヒーローがいません。</div>`;
@@ -664,7 +681,8 @@ function renderCards() {
   const d = ED[state.ed], HOT = ["☆飛び", "刀狩り", "ダビング", "特急周遊", "新幹線周遊", "テレポート", "リニア", "ラッセル車"], q = state.cardq;
   $("cardadvice").innerHTML = cardAdvice().map(([ic, t, s]) => `<li><span class="ic" aria-hidden="true">${ic}</span><b>${esc(t)}</b><span>${esc(s)}</span></li>`).join("");
   const list = CARD_INFO.filter((c) => (c.id !== "m229" || state.ed === "east") && hit(q, c.n, c.e, c.get));
-  $("cardinfo").innerHTML = list.length ? list.map((c) => `<li><b>${esc(c.n)}${hasCard(c.id) ? `<span class="own">手持ち</span>` : ""}<span class="conf ${c.st === "ok" ? "ok" : c.st === "est" ? "est" : "un"}">${CONF[c.st]}</span></b><span>${esc(c.e)}</span><span>入手：${esc(c.get)}</span></li>`).join("") : `<li><span>条件に合うカードがありません。</span></li>`;
+  list.sort((a, b) => hasCard(b.id) - hasCard(a.id));   // 手持ちを上に
+  $("cardinfo").innerHTML = list.length ? list.map((c) => `<li><b>${esc(c.n)}${hasCard(c.id) ? `<span class="own">手持ち ${state.cardN[c.id] || 1}枚</span>` : ""}<span class="conf ${c.st === "ok" ? "ok" : c.st === "est" ? "est" : "un"}">${CONF[c.st]}</span></b><span>${esc(c.e)}</span><span>使いどころ：${esc(c.use)}（目安）</span><span>入手：${esc(c.get)}</span></li>`).join("") : `<li><span>条件に合うカードがありません。</span></li>`;
   $("steps").innerHTML = d.loop.map((s) => `<li><span>${esc(s)}</span></li>`).join("");
   $("free").innerHTML = d.free.map((f) => `<li><b>${esc(f.s)}<small>${esc(f.p)}</small></b><span>${esc(f.m ? f.m[state.playMode === "multi" ? 1 : 0] : f.c)}</span></li>`).join("");
   $("shop").innerHTML = d.shops.filter((s) => hit(q, s.st, ...s.cards)).map((s) => `<li><span class="rk ${s.r === "—" ? "B" : s.r}" ${s.r === "—" ? 'aria-label="評価なし"' : ""}>${s.r}</span><b>${esc(s.st)}</b><div class="cs">${s.cards.map((c) => `<span${HOT.some((x) => c.startsWith(x)) ? ' class="hot"' : ""}>${esc(c)}</span>`).join("")}</div></li>`).join("");
@@ -738,10 +756,31 @@ function importBackup(text) {
   restore(); state.region = "all"; state.sel = null; state.mapPick = null;
   renderAll(); toast(`復元しました（${entries.length}項目）`);
 }
+/* 確認ダイアログの代わり：1回目で文言が変わり、5秒以内にもう一度押したら実行（true を返す） */
+function armed(btn, msg) {
+  if (btn.dataset.armed) { clearTimeout(armed.t); delete btn.dataset.armed; btn.textContent = btn.dataset.label; return true; }
+  btn.dataset.label = btn.textContent; btn.dataset.armed = "1"; btn.textContent = msg;
+  armed.t = setTimeout(() => { if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = btn.dataset.label; } }, 5000);
+  return false;
+}
 function resetAll() {
-  if (!confirm("入力した内容（年数・駅・所持金・カード・チェック）をすべて消します。よろしいですか？")) return;
   try { Object.keys(localStorage).filter((k) => k.startsWith("mt2p.")).forEach((k) => localStorage.removeItem(k)); } catch (e) {}
-  restore(); state.mapPick = null; renderAll(); toast("入力を消しました");
+  restore(); state.mapPick = null; $("gamesetup").open = true; renderAll(); toast("入力を消しました");
+}
+/* 新しいゲーム：年・月・駅・所持金・カード・チェックを消す。東西・年数・人数・作戦の設定は残す */
+function newGame() {
+  try { Object.keys(localStorage).filter((k) => /^mt2p\.(year|month|money|cards|cardn|other|started|from\.|to\.|custom\.|chk\.)/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch (e) {}
+  restore(); state.mapPick = null; $("gamesetup").open = true; renderAll(); window.scrollTo(0, 0); toast("新しいゲームの準備ができました");
+}
+/* 月を1つ進める。3月の次は、年が1つ進んで4月 */
+function nextMonth() {
+  let mo = state.month, y = state.year;
+  if (mo == null) mo = 4;
+  else if (mo === 3) { if (y >= state.N) { toast("最終年の3月です。ゲーム終了です"); return; } y += 1; mo = 4; }
+  else mo = (mo % 12) + 1;
+  state.month = mo; store.set("month", String(mo));
+  if (y !== state.year) setYear(y); else { renderPlan(); renderSign(); renderCal(); renderCards(); }
+  toast(`${state.year}年目 ${mo}月`);
 }
 $("restore-file").addEventListener("change", (e) => {
   const f = e.target.files && e.target.files[0]; e.target.value = ""; if (!f) return;
@@ -778,9 +817,22 @@ document.addEventListener("click", (e) => {
   else if (ds.pin) { state.sel = ds.pin; renderMap(); renderDetail(); renderGroups(); }
   else if (ds.card) {
     const cur = state.cards ? state.cards.slice() : [];
-    state.cards = cur.includes(ds.card) ? cur.filter((x) => x !== ds.card) : cur.concat([ds.card]);
+    if (cur.includes(ds.card)) { state.cards = cur.filter((x) => x !== ds.card); delete state.cardN[ds.card]; }
+    else { state.cards = cur.concat([ds.card]); state.cardN[ds.card] = 1; }
     saveCards();
   }
+  else if (ds.cardd) {   // 枚数の＋−。0枚になったら「持っていない」に戻す
+    const n = Math.max(0, Math.min(9, (state.cardN[ds.cardd] || 0) + parseInt(ds.d, 10))), cur = (state.cards || []).filter((x) => x !== ds.cardd);
+    if (n > 0) { cur.push(ds.cardd); state.cardN[ds.cardd] = n; } else delete state.cardN[ds.cardd];
+    state.cards = cur; saveCards();
+  }
+  else if (ds.money) {
+    const v = ds.money === "clear" ? null : Math.max(0, Math.min(99999, Math.round(((state.money || 0) + parseFloat(ds.money)) * 10000) / 10000));
+    state.money = v; store.set("money", v == null ? null : String(v)); $("in-money").value = v == null ? "" : v; renderPlan(); renderHeroes(); renderProps();
+  }
+  else if (ds.nextmonth) nextMonth();
+  else if (ds.startgame) { store.set("started", "1"); $("gamesetup").open = false; renderSetup(); toast(`${ED[state.ed].label}・${state.N}年で始めます`); }
+  else if (ds.newgame) { if (armed(b, "もう一度押すと、入力を消して最初から")) newGame(); }
   else if (ds.other) { if (!state.cards) state.cards = []; state.other = Math.max(0, Math.min(MAXCARDS, state.other + parseInt(ds.other, 10))); saveCards(); }
   else if (ds.swap) {
     const f = state.from; state.from = state.to || START[state.ed]; state.to = f;
@@ -791,7 +843,7 @@ document.addEventListener("click", (e) => {
   else if (ds.herof) { state.heroF = ds.herof; renderHeroes(); }
   else if (ds.propf) { state.propF = ds.propf; renderProps(); }
   else if (ds.backup === "export") exportBackup();
-  else if (ds.backup === "reset") resetAll();
+  else if (ds.backup === "reset") { if (armed(b, "もう一度押すと、すべて消します")) resetAll(); }
 });
 $("mapsvg").addEventListener("click", (e) => {
   const svg = $("mapsvg"), pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
@@ -824,6 +876,7 @@ const EXTRA_SOURCES = [
 $("sources").innerHTML = SOURCES.concat(EXTRA_SOURCES).map(([t, u]) => `<li><a href="${u}" target="_blank" rel="noopener">${esc(t)}</a></li>`).join("");
 $("verify").innerHTML = `<p class="note">確認日：${CHECKED}。確認済み＝出典の文言で確認／推定＝言い換えや出典の食い違いあり／未確認＝出典が見つからない。ここに無い数値は元の攻略記事のままです。</p><table class="vtable"><thead><tr><th>項目</th><th>状況</th><th>内容</th></tr></thead><tbody>${VERIFY.map((v) => `<tr><td>${v.u ? `<a href="${v.u}" target="_blank" rel="noopener">${esc(v.t)}</a>` : esc(v.t)}</td><td><span class="conf ${v.st}">${CONF[v.st]}</span></td><td>${esc(v.note)}</td></tr>`).join("")}</tbody></table>`;
 $("srcnote").textContent = "攻略サイト（2025年11月〜2026年1月更新）をもとに、2026年11月12日に主な数値を照合した参考プランです。公式Ver1.0.6（2026年3月3日）で一部の物件駅の配置・表記が変わっていますが、どの駅かは未確認です。32年目より先の助言は大まかです。";
+$("gamesetup").open = store.get("started", "") !== "1";
 renderAll();
 showView(location.hash.slice(1) || "plan", false);
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { renderMap(); if (state.view === "plan") renderRouteMap(computePlan()); });

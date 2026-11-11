@@ -56,15 +56,35 @@
     <img class="secchara" src="img/official/event_chara_1.webp" width="123" height="118" alt="" loading="lazy"><h2>攻略プラン <small id="plan-ed"></small></h2>
     <div id="focus" class="focus" aria-live="polite"></div>
     <div class="panel setup">
-      <div class="f">
-        <label for="in-n">何年プレイする？</label>
-        <div class="nrow">
-          <button type="button" data-n="-1" aria-label="1年減らす">−</button>
-          <input id="in-n" type="number" inputmode="numeric" min="1" max="100" value="17">
-          <span>年</span>
-          <button type="button" data-n="1" aria-label="1年増やす">＋</button>
+      <details class="more first" id="gamesetup">
+        <summary>ゲームの設定（年数・人数）<span id="game-sum"></span></summary>
+        <div class="f">
+          <label for="in-n">何年プレイする？</label>
+          <div class="nrow">
+            <button type="button" data-n="-1" aria-label="1年減らす">−</button>
+            <input id="in-n" type="number" inputmode="numeric" min="1" max="100" value="17">
+            <span>年</span>
+            <button type="button" data-n="1" aria-label="1年増やす">＋</button>
+          </div>
+          <div class="chips" id="presets" role="group" aria-label="よく使う年数"></div>
         </div>
-        <div class="chips" id="presets" role="group" aria-label="よく使う年数"></div>
+        <div class="f">
+          <label for="in-playmode">プレイ人数</label>
+          <select id="in-playmode">
+            <option value="solo">ひとり（COM対戦）</option>
+            <option value="multi">複数人</option>
+          </select>
+          <p class="note">東日本編・西日本編は、画面上のボタンで選びます。人数で、最初に止まるともらえるカードの表示が変わります。</p>
+        </div>
+        <div class="btnrow">
+          <button type="button" class="cta" data-startgame="1">この設定で始める</button>
+          <button type="button" class="soft-btn danger" data-newgame="1">新しいゲームを始める（入力を消す）</button>
+        </div>
+      </details>
+      <div class="f">
+        <span class="lab">いま</span>
+        <div class="nrow"><b id="now-y" class="nowy num"></b><select id="in-month" aria-label="いまの月" class="w-month"><option value="">わからない</option><option value="4">4月</option><option value="5">5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option></select><button type="button" class="soft-btn" data-nextmonth="1">次の月へ ▶</button></div>
+        <p class="note">月ごとの「やること」と、止まらない場所に反映します。3月の次は、年が1つ進んで4月になります。</p>
       </div>
       <div class="f" data-pick="from">
         <label for="in-from">いまいる駅</label>
@@ -78,27 +98,21 @@
         <div class="setup-tools"><button type="button" class="soft-btn" data-swap="1">⇄ いまいる駅と目的地を入れ替える</button></div>
       </div>
       <div class="f">
-        <label for="in-money">所持金（入れなくてもOK）</label>
+        <label for="in-money">所持金</label>
         <div class="nrow"><input id="in-money" type="number" inputmode="decimal" min="0" max="99999" step="0.1" placeholder="例 12.5" class="w-money"><span>億円</span></div>
-        <p class="note">入れると、いま独占できる駅・買える物件を判定し、手が届かないヒーローは順位を下げます。</p>
+        <div class="chips" role="group" aria-label="所持金を足し引きする">
+          <button type="button" class="chip" data-money="1">+1億</button><button type="button" class="chip" data-money="10">+10億</button><button type="button" class="chip" data-money="100">+100億</button>
+          <button type="button" class="chip" data-money="-1">−1億</button><button type="button" class="chip" data-money="-10">−10億</button><button type="button" class="chip" data-money="clear">消す</button>
+        </div>
+        <p class="note">入れると、買える物件・所持金が独占額に届く駅を出し、手が届かないヒーローは順位を下げます。</p>
       </div>
       <details class="more" id="more">
-        <summary>くわしい状況（月・人数・カード・作戦）<span id="more-sum"></span></summary>
+        <summary>カードと作戦<span id="more-sum"></span></summary>
         <div class="f">
-          <label for="in-month">いまの月</label>
-          <select id="in-month">
-            <option value="">わからない（未設定）</option>
-            <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
-          </select>
-          <p class="note">月で決まる注意（7月の軽井沢、8月の青マス、決算など）と、止まらない場所に反映します。</p>
-        </div>
-        <div class="f">
-          <label for="in-playmode">プレイ人数</label>
-          <select id="in-playmode">
-            <option value="solo">ひとり（COM対戦）</option>
-            <option value="multi">複数人</option>
-          </select>
-          <p class="note">最初に止まるともらえるカードの中身（人数で変わる駅）の表示を切り替えます。</p>
+          <span class="lab" id="cardreg-label">いま持っているカード（名前をタップで持つ・持たない、＋−で枚数）</span>
+          <div class="cardreg" id="cardreg" role="group" aria-labelledby="cardreg-label"></div>
+          <div class="nrow small"><span>ほかのカード</span><button type="button" data-other="-1" aria-label="ほかのカードを1枚減らす">−</button><b id="other-n" class="num">0</b><span>枚</span><button type="button" data-other="1" aria-label="ほかのカードを1枚増やす">＋</button></div>
+          <p class="note" id="cardreg-note"></p>
         </div>
         <div class="f">
           <label for="in-goal">作戦</label>
@@ -109,15 +123,10 @@
           </select>
           <p class="note">寄り道する駅と、やることの順位の重みを変えます。</p>
         </div>
-        <div class="f">
-          <span class="lab" id="cardreg-label">いま持っているカード</span>
-          <div class="cardreg" id="cardreg" role="group" aria-labelledby="cardreg-label"></div>
-          <div class="nrow small"><span>ほかのカード</span><button type="button" data-other="-1" aria-label="ほかのカードを1枚減らす">−</button><b id="other-n" class="num">0</b><span>枚</span><button type="button" data-other="1" aria-label="ほかのカードを1枚増やす">＋</button></div>
-          <p class="note" id="cardreg-note"></p>
-        </div>
       </details>
     </div>
     <div id="planout" class="planout"></div>
+    <p class="note">寄る駅の順位と「最優先」は、このアプリ独自の目安です（駅の種類・年・所持金・手持ちカードから点数を付けています）。勝率や期待収益を計算したものではありません。</p>
     <h3 id="ov-title"></h3>
     <ul class="panel ov" id="ov"></ul>
     <p class="note">駅の位置とマス数は、公式サイト「まるっと全駅！マップ」の盤面をもとにしています。寄り道は盤面の上で通り道に近い駅から選び、マス数は「たて＋よこ」で数えています。線路のつながりは入っていないので、回り道の分だけ実際のマス数は増えます。動く前にゲーム画面で経路を確かめてください。</p>
@@ -173,6 +182,7 @@
     <div id="herolist" class="groups"></div>
     <h3>仲間にしない</h3>
     <ul class="panel mini" id="heroavoid"></ul>
+    <p class="note">「独占額に届く」は、所持金が独占額以上という意味です。ほかの社長がすでに物件を買っている駅は独占できません。</p>
     <p class="note">SS・S・A・BはGame8の評価。「推」はファミ通の攻略ガイドの推奨です。「東西」は同じ人物がもう一方のマップにもいる場合の駅と独占額です。</p>
   </section>
 

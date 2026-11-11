@@ -43,7 +43,7 @@ with sync_playwright() as p:
     pg.fill("#in-money", "15"); pg.wait_for_timeout(100)
     out = text(pg, "#planout")
     rl = text(pg, ".rlist")
-    check("8年目・15億で深川・米沢が『いま独占できる』", "深川\n歴史ヒーロー\nいま独占できる" in rl and "米沢\n歴史ヒーロー\nいま独占できる" in rl, rl[:400])
+    check("8年目・15億で深川・米沢が『独占額に届く』", "深川\n歴史ヒーロー\n独占額に届く" in rl and "米沢\n歴史ヒーロー\n独占額に届く" in rl, rl[:400])
     check("8年目・15億で家康が最優先にならない", "徳川家康" not in text(pg, "#focus"), text(pg, "#focus"))
     check("8年目は小田原の注意（避けること）が出る", "小田原" in out, "")
     # 9年目の小田原
@@ -68,7 +68,7 @@ with sync_playwright() as p:
     seq = text(pg, ".rlist")
     check("大阪→福岡で宮本武蔵・さぬき・因島", all(s in seq for s in ["宮本武蔵", "さぬき", "因島"]), seq[:300])
     check("1人プレイ：宮本武蔵はリニア周遊", "リニア周遊カード（1人プレイ）" in text(pg, "#planout") or "リニア周遊" in seq)
-    pg.click("summary:has-text('くわしい状況')")
+    pg.click("summary:has-text('カードと作戦')")
     pg.select_option("#in-playmode", "multi"); pg.wait_for_timeout(80)
     check("複数人：宮本武蔵はリニアカード", "リニアカード" in text(pg, "#planout"), text(pg, "#planout")[:200])
     pg.select_option("#in-playmode", "solo")
@@ -116,6 +116,24 @@ with sync_playwright() as p:
     pg.click("a[data-tab='year']"); pg.wait_for_timeout(100)
     cb = pg.locator("#todo input[type=checkbox]").first; cb.check(); pg.wait_for_timeout(50)
     check("チェックリストを付けられる", pg.locator("#todo li.done").count() == 1)
+    # 月を進める・所持金ボタン・カード枚数・買えるもの・新しいゲーム
+    pg.click("a[data-tab='plan']"); pg.select_option("#in-month", "2"); y0 = pg.evaluate("state.year")
+    pg.click("[data-nextmonth]"); pg.click("[data-nextmonth]"); pg.wait_for_timeout(80)
+    check("次の月へ：2月→3月→翌年4月", pg.evaluate("state.month") == 4 and pg.evaluate("state.year") == y0 + 1, (pg.evaluate("state.month"), pg.evaluate("state.year")))
+    check("3月は決算のやることが出る", pg.evaluate("(state.month=3, renderPlan(), document.getElementById('planout').innerText.includes('決算前'))"))
+    pg.evaluate("state.month=4; store.set('month','4'); setYear(%d)" % y0)
+    pg.click("[data-money='clear']"); pg.click("[data-money='10']"); pg.click("[data-money='1']"); pg.click("[data-money='1']"); pg.wait_for_timeout(80)
+    check("所持金ボタン：+10 +1 +1 = 12億", pg.evaluate("state.money") == 12 and pg.input_value("#in-money") == "12")
+    buy = text(pg, "#planout")
+    check("12億で買えるものが出る（かほく 高級ブドウ園）", "所持金12億で買えるもの" in buy and "高級ブドウ園" in buy, buy[:200])
+    pg.click("[data-money='clear']"); pg.wait_for_timeout(60)
+    pg.click("[data-cardd='tokkyu'][data-d='1']"); pg.click("[data-cardd='tokkyu'][data-d='1']"); pg.wait_for_timeout(60)
+    check("カード枚数：特急周遊を2枚", pg.evaluate("cardCount()") == 2 and pg.evaluate("state.cardN.tokkyu") == 2)
+    pg.click("[data-cardd='tokkyu'][data-d='-1']"); pg.wait_for_timeout(60)
+    check("カード1枚以下で『カードを補充する』が出る", "カードを補充する" in text(pg, "#planout"))
+    pg.click("[data-cardd='tokkyu'][data-d='-1']"); pg.wait_for_timeout(60)
+    check("0枚にすると持っていない扱い", pg.evaluate("JSON.stringify(state.cards)") == "[]")
+    pg.click("a[data-tab='cards']"); check("カード画面に使いどころが出る", "使いどころ" in text(pg, "#cardinfo")); pg.click("a[data-tab='plan']")
     # 保存と再読み込み
     pg.reload(wait_until="domcontentloaded"); pg.wait_for_timeout(400)
     pg.click("a[data-tab='year']"); pg.wait_for_timeout(100)
@@ -156,7 +174,7 @@ with sync_playwright() as p:
     path = dl.value.path(); data = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
     check("バックアップを書き出せる", data.get("kind") == "momotetsu2-planner-backup" and "mt2p.N" in data["data"])
     pg.on("dialog", lambda d: d.accept())
-    pg.click("[data-backup='reset']"); pg.wait_for_timeout(100)
+    pg.click("[data-backup='reset']"); pg.click("[data-backup='reset']"); pg.wait_for_timeout(100)  # 2回押して実行
     check("すべて消す：初期値に戻る", pg.input_value("#in-n") == "17" and pg.input_value("#in-from") == "東京" and pg.evaluate("state.cards") is None)
     pg.set_input_files("#restore-file", path); pg.wait_for_timeout(300)
     check("ファイルから戻す", pg.evaluate("state.cards") == [] and pg.evaluate("state.N") == 17 and pg.input_value("#in-to") != "", (pg.evaluate("state.cards"), pg.evaluate("state.year")))
@@ -166,6 +184,13 @@ with sync_playwright() as p:
     evil = OUT / "evil.json"; evil.write_text(json.dumps({"kind": "momotetsu2-planner-backup", "data": {"mt2p.custom.east": json.dumps({"to": {"n": "<img src=x onerror=window.__x=1>", "la": 36, "lo": 140}}), "mt2p.to.east": "<img src=x onerror=window.__x=1>", "evil": "1"}}), encoding="utf-8")
     pg.set_input_files("#restore-file", str(evil)); pg.wait_for_timeout(300)
     check("悪意のある復元データでもスクリプトが動かない", pg.evaluate("window.__x") is None and pg.evaluate("localStorage.getItem('evil')") is None)
+    pg.evaluate("document.getElementById('gamesetup').open = true"); pg.fill("#in-money", "30"); pg.dispatch_event("#in-money", "input")
+    n0 = pg.evaluate("state.N"); pg.click("[data-newgame]"); pg.wait_for_timeout(100)
+    check("新しいゲーム：1回目は消さない", pg.evaluate("state.money") == 30)
+    pg.click("[data-newgame]"); pg.wait_for_timeout(150)
+    check("新しいゲーム：2回目で年・月・所持金・駅が最初に戻り、年数の設定は残る", pg.evaluate("state.year") == 1 and pg.evaluate("state.month") == 4 and pg.evaluate("state.money") is None and pg.evaluate("state.N") == n0 and pg.input_value("#in-to") == "", (pg.evaluate("state.year"), pg.evaluate("state.month")))
+    pg.click("[data-startgame]"); pg.wait_for_timeout(80)
+    check("この設定で始める：設定が閉じる", pg.evaluate("document.getElementById('gamesetup').open") is False)
     check("JavaScriptエラーなし", not errs, errs[:3])
     ctx.close()
 
@@ -177,7 +202,7 @@ with sync_playwright() as p:
             q.on("pageerror", lambda e: e2.append(str(e)))
             q.goto(URL, wait_until="domcontentloaded"); q.evaluate("localStorage.clear()"); q.reload(wait_until="domcontentloaded")
             q.evaluate("Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 4000))])"); q.wait_for_timeout(400)  # Webフォントを最大4秒待つ
-            pick(q, "to", "仙台"); q.fill("#in-money", "15"); q.click("summary:has-text('くわしい状況')")
+            pick(q, "to", "仙台"); q.fill("#in-money", "15"); q.click("summary:has-text('カードと作戦')")
             over = []
             for t in ["plan", "year", "map", "heroes", "props", "cards"]:
                 q.click(f"a[data-tab='{t}']"); q.wait_for_timeout(150)
@@ -189,7 +214,7 @@ with sync_playwright() as p:
                 if small and scheme == "light": results.append((f"{w}px {t} タップ対象40px未満", False, small)); print("WARN", w, t, small)
                 clipped = q.evaluate("""()=>[...document.querySelectorAll('[data-view]:not([hidden]) *, .bar *, .tabs *')].filter(e=>e.offsetParent!==null&&!e.closest('svg')&&e.clientWidth>0).filter(e=>{const c=getComputedStyle(e); return (c.overflowX==='hidden'||c.overflowX==='clip'||c.textOverflow==='ellipsis'||c.whiteSpace==='nowrap')&&e.scrollWidth>e.clientWidth+1&&c.overflowX!=='visible'}).slice(0,4).map(e=>e.tagName+'.'+String(e.className).slice(0,24)+'['+(e.textContent||'').trim().slice(0,12)+']')""")
                 if clipped: over.append((t, "文字切れ", clipped))
-                overlap = q.evaluate("""()=>{const bs=[...document.querySelectorAll('[data-view]:not([hidden]) button, [data-view]:not([hidden]) select, [data-view]:not([hidden]) input, .bar button, .bar a')].filter(e=>e.offsetParent!==null&&!e.closest('svg,.tl-grid,details:not([open])')&&e.type!=='file').map(e=>[e,e.getBoundingClientRect()]); const out=[]; for(let i=0;i<bs.length;i++)for(let k=i+1;k<bs.length;k++){const [a,r]=bs[i],[b,s]=bs[k]; if(a.contains(b)||b.contains(a))continue; const w=Math.min(r.right,s.right)-Math.max(r.left,s.left),h=Math.min(r.bottom,s.bottom)-Math.max(r.top,s.top); if(w>2&&h>2){out.push((a.textContent||a.id).trim().slice(0,8)+'×'+(b.textContent||b.id).trim().slice(0,8)); if(out.length>3)return out;}} return out}""")
+                overlap = q.evaluate("""()=>{const bs=[...document.querySelectorAll('[data-view]:not([hidden]) button, [data-view]:not([hidden]) select, [data-view]:not([hidden]) input')].filter(e=>e.offsetParent!==null&&!e.closest('svg,.tl-grid,details:not([open])')&&e.type!=='file').map(e=>[e,e.getBoundingClientRect()]); const out=[]; for(let i=0;i<bs.length;i++)for(let k=i+1;k<bs.length;k++){const [a,r]=bs[i],[b,s]=bs[k]; if(a.contains(b)||b.contains(a))continue; const w=Math.min(r.right,s.right)-Math.max(r.left,s.left),h=Math.min(r.bottom,s.bottom)-Math.max(r.top,s.top); if(w>2&&h>2){out.push((a.textContent||a.id).trim().slice(0,8)+'×'+(b.textContent||b.id).trim().slice(0,8)); if(out.length>3)return out;}} return out}""")
                 if overlap: over.append((t, "重なり", overlap))
                 if not (scheme == "light" and w in (320, 390, 768, 1280) or scheme == "dark" and w == 390): continue
                 try: q.screenshot(path=str(OUT / f"{scheme}-{w}-{t}.png"), full_page=(t == "plan"), timeout=60000)
